@@ -11,6 +11,11 @@ from datetime import datetime
 pygame.init()
 pygame.mixer.init()
 
+usuario_atual = ""
+input_ativo = True
+cursor_visivel = True
+ultimo_blink = time.time()
+
 CORES = {
     'PRETO': (15, 15, 15),
     'BRANCO': (240, 240, 240),
@@ -45,13 +50,18 @@ def obter_diagnostico(media_ms):
     else: return "FADIGA CRITICA", CORES['VERMELHO']
 
 # --- Funções de Dados ---
-def salvar_resultados(dados, erros_i, erros_o):
-    if not dados: 
-        print("DEBUG: Nenhum dado coletado, salvamento cancelado.")
+def salvar_resultados(dados, erros_i, erros_o, usuario):
+    print(f"Dados recebidos para salvar: {len(dados)} tentativas")
+    if not dados or not usuario : 
+        print("DEBUG: Falha - Dados ou Usuário vazios.")
         return
     pasta = os.path.dirname(os.path.abspath(__file__))
+
+    # Define o caminho para o arquivo ÚNICO na pasta do script (igual ao dash)
+    pasta = os.path.dirname(os.path.abspath(__file__))
     arquivo = os.path.join(pasta, "log_foco_detalhado.csv")
-    existe = os.path.exists(arquivo)    
+    existe = os.path.exists(arquivo)
+
     tempos_v = [d[1] for d in dados if d[0] == 'VISUAL']
     tempos_s = [d[1] for d in dados if d[0] == 'SONORO']
     todas = [d[1] for d in dados]
@@ -66,9 +76,10 @@ def salvar_resultados(dados, erros_i, erros_o):
         with open(arquivo, 'a', newline='', encoding='utf-8-sig') as f:
             escritor = csv.writer(f)
             if not existe:
-                escritor.writerow(['Data_Hora', 'Media_Visual', 'Media_Sonora', 'Media_Geral', 'Status', 'Erros_Impulso', 'Erros_Omissao','Observacoes'])
+                escritor.writerow(['Operador','Data_Hora', 'Media_Visual', 'Media_Sonora', 'Media_Geral', 'Status', 'Erros_Impulso', 'Erros_Omissao','Observacoes'])
             
             escritor.writerow([
+                usuario.upper(), #Nome do Operador
                 datetime.now().strftime("%Y-%m-%d %H:%M"), 
                 round(media_v, 2), 
                 round(media_s, 2), 
@@ -76,7 +87,7 @@ def salvar_resultados(dados, erros_i, erros_o):
                 status, 
                 erros_i, 
                 erros_o,
-                ""
+                "" #Observação vazia
             ])
             f.flush() # Força a gravação imediata no disco
         print(f"DEBUG: Dados salvos com sucesso em {arquivo}")
@@ -103,7 +114,7 @@ tentativa_atual = 0
 dados_coletados = []
 erros_impulso = 0
 erros_omissao = 0
-estado = 'MENU'
+estado = 'LOGIN'
 proximo_evento = 0
 momento_estimulo = 0
 tipo_atual = ''
@@ -122,8 +133,13 @@ def desenhar_barra_progresso():
     pygame.draw.rect(tela, CORES['CINZA_ESC'], (0, 0, LARGURA, 10))
     pygame.draw.rect(tela, CORES['AZUL'], (0, 0, progresso, 10))
 
+clock = pygame.time.Clock()
+pygame.key.set_repeat(300,50)
+foi_salvo = False
+
 # --- Loop Principal ---
 while True:
+    #LIMPEZA INICIAL
     tela.fill(CORES['PRETO'])
     agora = time.time()
     mouse_pos = pygame.mouse.get_pos()
@@ -133,15 +149,56 @@ while True:
         if event.type == pygame.QUIT:
             pygame.quit(); sys.exit()
         if event.type == pygame.MOUSEBUTTONDOWN:
+            clique = True     
+        # Lógica de digitação
+        if event.type == pygame.MOUSEBUTTONDOWN:
             clique = True
+        
+        # Lógica de teclado APENAS se estiver no LOGIN
+        if event.type == pygame.KEYDOWN and estado == 'LOGIN':
+            if event.key == pygame.K_RETURN:
+                if len(usuario_atual) > 2: 
+                    estado = 'MENU'
+            elif event.key == pygame.K_BACKSPACE:
+                usuario_atual = usuario_atual[:-1]
+            elif event.key != pygame.K_ESCAPE:
+                if len(usuario_atual) < 15:
+                    if event.unicode.isprintable() and event.unicode != '\r':
+                        usuario_atual += event.unicode
 
     # --- Lógica de Estados ---
-    if estado == 'MENU':
+    if estado == 'LOGIN':
+        mostrar_texto("SISTEMA DE CONTROLE DE FADIGA", CORES['AMARELO'], LARGURA/2, 150, 'm')
+        mostrar_texto("Digite o nome do operador e aperte ENTER:", CORES['BRANCO'], LARGURA/2, 220, 'p')
+        
+        # Desenho da caixa de texto
+        box_rect = pygame.Rect(LARGURA/2 - 150, 260, 300, 50)
+        pygame.draw.rect(tela, CORES['CINZA_ESC'], box_rect, border_radius=5)
+        pygame.draw.rect(tela, CORES['AZUL'], box_rect, 2, border_radius=5)
+        
+        # Lógica do Cursor piscante
+        if time.time() - ultimo_blink > 0.5:
+            cursor_visivel = not cursor_visivel
+            ultimo_blink = time.time()
+            
+        txt_display = usuario_atual + ("|" if cursor_visivel else "")
+        mostrar_texto(txt_display, CORES['BRANCO'], LARGURA/2, 285, 'm')
+        pass
+            
+# Lógica de cliques (para o resto do sistema)
+    elif estado == 'MENU':
+        btn_L_rect = pygame.Rect(150, 160, 230, 45)
+        btn_R_rect = pygame.Rect(420, 160, 230, 45)
+        btn_go_rect = pygame.Rect(150, 260, 230, 45)
+        btn_nogo_rect = pygame.Rect(420, 260, 230, 45)
+        btn_cores_rect = pygame.Rect(150, 330, 230, 45)
+        btn_hist_rect = pygame.Rect(420, 330, 230, 45)
+        
+        if event.type == pygame.MOUSEBUTTONDOWN:
+                clique = True
         mostrar_texto("CALIBRAÇÃO DE ESTÍMULOS", CORES['AMARELO'], LARGURA/2, 80, 'g')
         mostrar_texto("Complete o preparo antes de iniciar:", CORES['BRANCO'], LARGURA/2, 150, 'p')
         # --- BOTÕES DE ÁUDIO (L/R) ---
-        btn_L_rect = pygame.Rect(150, 160, 230, 45)
-        btn_R_rect = pygame.Rect(420, 160, 230, 45)
         # Canal Esquerdo
         pygame.draw.rect(tela, CORES['OK'] if checks['som_L'] else CORES['CINZA_ESC'], btn_L_rect, border_radius=8)
         mostrar_texto("TESTAR ESQUERDO (L)", CORES['BRANCO'], 265, 182, 'p')
@@ -184,16 +241,29 @@ while True:
 # --- LÓGICA DE CLIQUE ATUALIZADA ---
         if clique:
             if btn_L_rect.collidepoint(mouse_pos):
-                canal = som_go.play(); canal.set_volume(1.0, 0.0); checks['som_L'] = True
-            if btn_R_rect.collidepoint(mouse_pos):
-                canal = som_go.play(); canal.set_volume(0.0, 1.0); checks['som_R'] = True
-            if btn_go_rect.collidepoint(mouse_pos):
-                som_go.play(); checks['som_go'] = True
-            if btn_nogo_rect.collidepoint(mouse_pos):
-                som_nogo.play(); checks['som_nogo'] = True            
-            if btn_cores_rect.collidepoint(mouse_pos): 
+                canal = som_go.play()
+                if canal: # Proteção extra: só ajusta volume se o canal foi criado
+                    canal.set_volume(1.0, 0.0)
+                checks['som_L'] = True
+                
+            elif btn_R_rect.collidepoint(mouse_pos):
+                canal = som_go.play()
+                if canal:
+                    canal.set_volume(0.0, 1.0)
+                checks['som_R'] = True
+                
+            elif btn_go_rect.collidepoint(mouse_pos):
+                som_go.play()
+                checks['som_go'] = True
+                
+            elif btn_nogo_rect.collidepoint(mouse_pos):
+                som_nogo.play()
+                checks['som_nogo'] = True            
+                
+            elif btn_cores_rect.collidepoint(mouse_pos): 
                 checks['cores'] = True
-            if btn_hist_rect.collidepoint(mouse_pos):
+                
+            elif btn_hist_rect.collidepoint(mouse_pos):
                 import dashboard
                 dashboard.gerar_analise()
 
@@ -262,11 +332,17 @@ while True:
                 proximo_evento = 0
 
     elif estado == 'FIM':
+        if not foi_salvo:
+            print(f"Salvando os dados de: {usuario_atual}")
+            salvar_resultados(dados_coletados,erros_impulso,erros_omissao,usuario_atual)
+            foi_salvo = True
+
         # Indentação corrigida aqui
         tempos_v = [d[1] for d in dados_coletados if d[0] == 'VISUAL']
         tempos_s = [d[1] for d in dados_coletados if d[0] == 'SONORO']
         media_v = sum(tempos_v)/len(tempos_v) if tempos_v else 0
         media_s = sum(tempos_s)/len(tempos_s) if tempos_s else 0
+        
         
         # Diagnósticos individuais
         status_v, cor_v = obter_diagnostico(media_v)
@@ -275,11 +351,6 @@ while True:
         # Diagnóstico Geral (Pelo pior resultado - Conservador)
         pior_media = max(media_v, media_s)
         status_geral, cor_geral = obter_diagnostico(pior_media)
-
-        # Verificamos se 'salvo' NÃO existe nas variáveis locais
-        if 'salvo' not in locals():
-            salvar_resultados(dados_coletados, erros_impulso, erros_omissao)
-            salvo = True  # Agora sim, criamos a variável para não salvar de novo no próximo fram
 
         # --- Interface Refinada ---
         mostrar_texto("DADOS POR MODALIDADE", CORES['AMARELO'], LARGURA/2, 80, 'm')
@@ -301,10 +372,28 @@ while True:
 
         mostrar_texto("Clique para voltar ao menu", CORES['CINZA_CLARO'], LARGURA/2, 550, 'p')
         
-        
         if clique:
+            
+            # 2. O SEGREDO: Resetar os checks de calibração
+            # Ao colocar tudo como False, o botão "INICIAR" do Menu desaparece
+            # e o programa é obrigado a parar no Menu e esperar você testar tudo de novo.
+            checks = {
+                "som_L": False, 
+                "som_R": False, 
+                "som_go": False, 
+                "som_nogo": False, 
+                "cores": False
+            }
+            
+            # 3. LIMPEZA DE DADOS (Zera as estatísticas do teste que acabou)
+            dados_coletados.clear()
+            erros_impulso = 0
+            erros_omissao = 0
+            
+            # 4. RESET DA TRAVA DE SALVAMENTO
+            # Se você usou a variável 'foi_salvo' que sugeri:
+            foi_salvo = False 
+            # RESET DE ESTADO
             estado = 'MENU'
-            checks = {"som_L":False,"som_R":False,"som_go": False, "som_nogo": False, "cores": False}
-            if 'salvo' in locals(): del salvo
 
     pygame.display.flip()
