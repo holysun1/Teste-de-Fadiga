@@ -7,6 +7,27 @@ import csv
 import numpy as np
 from datetime import datetime
 
+def obter_caminho_externo():
+    if getattr(sys, 'frozen', False):
+        # Se estiver rodando como .exe, olha para a pasta do executável
+        return os.path.dirname(sys.executable)
+    # Se estiver rodando como .py, olha para a pasta do script
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+import sys
+def resource_path(relative_path):
+    """ Retorna o caminho absoluto para o recurso, seja no modo script ou .exe """
+    try:
+        # Caminho da pasta temporária do PyInstaller
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
+
+
+
 # --- Inicialização ---
 pygame.init()
 pygame.mixer.init()
@@ -55,10 +76,9 @@ def salvar_resultados(dados, erros_i, erros_o, usuario):
     if not dados or not usuario : 
         print("DEBUG: Falha - Dados ou Usuário vazios.")
         return
-    pasta = os.path.dirname(os.path.abspath(__file__))
 
     # Define o caminho para o arquivo ÚNICO na pasta do script (igual ao dash)
-    pasta = os.path.dirname(os.path.abspath(__file__))
+    pasta = obter_caminho_externo() 
     arquivo = os.path.join(pasta, "log_foco_detalhado.csv")
     existe = os.path.exists(arquivo)
 
@@ -105,8 +125,8 @@ def gerar_beep(frequencia, duracao_ms=150):
     stereo_array = np.stack((sound_array, sound_array), axis=-1)
     return pygame.sndarray.make_sound(stereo_array)
 
-som_go = gerar_beep(1000)
-som_nogo = gerar_beep(300)
+som_go = pygame.mixer.Sound(resource_path("som_go.wav"))
+som_nogo = pygame.mixer.Sound(resource_path("som_nogo.wav"))
 
 # --- Variáveis Globais ---
 TENTATIVAS_TOTAIS = 10
@@ -233,10 +253,18 @@ while True:
             mostrar_texto("REVISAR CORES", CORES['BRANCO'], 265, 325, 'p') # Texto centralizado normal
 
         # --- BOTÃO: VER HISTÓRICO ---
-        btn_hist_rect = pygame.Rect(420, 300, 230, 50)
-        cor_hist = CORES['AZUL'] if btn_hist_rect.collidepoint(mouse_pos) else CORES['CINZA_CLARO']
-        pygame.draw.rect(tela, cor_hist, btn_hist_rect, border_radius=8)
-        mostrar_texto("VER HISTÓRICO", CORES['BRANCO'], 535, 325, 'p')
+        # --- Lógica de Verificação de Banco de Dados ---
+        pasta_db = obter_caminho_externo()
+        arquivo_db = os.path.join(pasta_db, "log_foco_detalhado.csv")
+        existe_db = os.path.exists(arquivo_db)
+
+        # --- Desenho do Botão de Histórico ---
+        # Se não existe banco, desenha em cinza, se existe, desenha na cor normal
+        cor_btn_hist = CORES['AZUL'] if existe_db else (100, 100, 100) # Cinza se vazio
+        
+        # (Aqui vai o seu código de desenhar o retângulo do botão de histórico)
+        pygame.draw.rect(tela, cor_btn_hist, btn_hist_rect, border_radius=5)
+        mostrar_texto("HISTÓRICO", CORES['BRANCO'], btn_hist_rect.centerx, btn_hist_rect.centery, 'p')
 
 # --- LÓGICA DE CLIQUE ATUALIZADA ---
         if clique:
@@ -264,8 +292,12 @@ while True:
                 checks['cores'] = True
                 
             elif btn_hist_rect.collidepoint(mouse_pos):
-                import dashboard
-                dashboard.gerar_analise()
+                if existe_db:
+                    import dashboard
+                    dashboard.gerar_analise()
+                else:
+                    # Opcional: Avisar o usuário que não tem dados
+                    print("Banco de dados vazio. Faça um teste primeiro.")
 
         # --- BOTÃO INICIAR ---
         pode_iniciar = all(checks.values())
