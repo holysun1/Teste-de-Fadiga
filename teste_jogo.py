@@ -84,6 +84,8 @@ input_texto = ""
 input_ativo = True
 cursor_visivel = True
 ultimo_blink = time.time()
+usuario_deslogando = ""
+mensagem_login = ""
 
 CORES = {
     'PRETO': (15, 15, 15),
@@ -224,6 +226,7 @@ while True:
         
         # Lógica de teclado APENAS se estiver no LOGIN
         if event.type == pygame.KEYDOWN and estado == 'LOGIN':
+            mensagem_login = ""
             #LÓGICA DE AUTENTICAÇÃO
             if event.key == pygame.K_RETURN:
                 if input_texto.upper() == "ADMIN":
@@ -241,16 +244,16 @@ while True:
                             estado = 'MENU'
                             input_texto =""
                         else:
-                            print("Usuário não cadastrado!")
+                            mensagem_login = "Usuário não cadastrado!"
                     except Exception as e:
-                            print(f"Erro ao ler o banco de dados: {e}")
+                            mensagem_login = "Erro ao acessar o banco de dados"
             elif event.key == pygame.K_BACKSPACE:
                 input_texto = input_texto[:-1]
             else:
                 if event.unicode.isprintable():
                     input_texto += event.unicode 
-                
 
+                
     # --- Lógica de Estados ---
     if estado == 'LOGIN':
         mostrar_texto("SISTEMA DE CONTROLE DE FADIGA", CORES['AMARELO'], LARGURA/2, 150, 'm')
@@ -260,6 +263,10 @@ while True:
         box_rect = pygame.Rect(LARGURA/2 - 150, 260, 300, 50)
         pygame.draw.rect(tela, CORES['CINZA_ESC'], box_rect, border_radius=5)
         pygame.draw.rect(tela, CORES['AZUL'], box_rect, 2, border_radius=5)
+
+        # --- DESENHO DA MENSAGEM DE ERRO ---
+        if mensagem_login:
+            mostrar_texto(mensagem_login, (255, 50, 50), LARGURA/2, 350, 'p')
         
         # Lógica do Cursor piscante
         if time.time() - ultimo_blink > 0.5:
@@ -269,7 +276,18 @@ while True:
         txt_display = input_texto + ("|" if cursor_visivel else "")
         mostrar_texto(txt_display, CORES['BRANCO'], LARGURA/2, 285, 'm')
         pass
-            
+    
+    elif estado == 'LOGOUT':
+        tela.fill(CORES['PRETO']) # Garante a tela preta
+        
+        # Mensagem de agradecimento
+        mostrar_texto("Logout realizado com sucesso!", CORES['VERDE'], LARGURA/2, ALTURA/2 - 20, 'm')
+        mostrar_texto(f"Obrigado pelo seu trabalho, {usuario_deslogando}.", CORES['BRANCO'], LARGURA/2, ALTURA/2 + 30, 'p')
+        
+        # Quando o tempo acabar, volta para o Login
+        if agora >= proximo_evento:
+            estado = 'LOGIN'
+
     elif estado == 'MENU':
         # --- 1. CONFIGURAÇÃO DE COORDENADAS (DEFINIR UMA VEZ SÓ) ---
         margem_x = LARGURA / 2
@@ -292,7 +310,17 @@ while True:
         # Botão Iniciar (Centro Inferior)
         btn_start_rect = pygame.Rect(margem_x - 150, 480, 300, 70)
 
+        # --- NOVA DEFINIÇÃO: BOTÃO VOLTAR (Canto Inferior Esquerdo) ---
+        btn_voltar_rect = pygame.Rect(30, ALTURA - 75, 150, 45)
+        # --- APLICAÇÃO DO HOVER ---
+        # A cor muda para um tom avermelhado se o mouse estiver em cima
+        cor_voltar = (100, 30, 30) if btn_voltar_rect.collidepoint(mouse_pos) else (60, 60, 60)
 
+        pygame.draw.rect(tela, cor_voltar, btn_voltar_rect, border_radius=10)
+        pygame.draw.rect(tela, CORES['CINZA_CLARO'], btn_voltar_rect, 1, border_radius=10)
+        mostrar_texto("← SAIR", CORES['BRANCO'], btn_voltar_rect.centerx, btn_voltar_rect.centery, 'p')
+
+        
         # --- 3. DESENHO DA INTERFACE ---
         
         # Cabeçalho
@@ -338,6 +366,8 @@ while True:
         else:
             # Texto centralizado normal quando o mouse não está em cima
             mostrar_texto("REVISAR CORES", CORES['BRANCO'], btn_cores_rect.centerx, btn_cores_rect.centery, 'p')
+ 
+   
 
         # --- 4. ZONA ADMIN (SÓ SE FOR NÍVEL 1) ---
         if nivel_acesso == 1:
@@ -364,6 +394,19 @@ while True:
         else:
             mostrar_texto("INICIAR TESTE", CORES['BRANCO'], btn_start_rect.centerx, btn_start_rect.centery, 'm')
 
+        # 2. BOTÃO DE INICIAR (Separado, para todos os níveis!)
+        # Tirei do 'elif' e deixei como um 'if' próprio para garantir a execução
+        if btn_start_rect.collidepoint(mouse_pos) and pode_iniciar:
+            print("Iniciando o teste...")
+            tentativa_atual = 0
+            dados_coletados = []
+            erros_impulso = 0
+            erros_omissao = 0
+            lista_estimulos = (['GO']*14 + ['NOGO']*6)
+            random.shuffle(lista_estimulos)
+            estado = 'ESPERA'
+            proximo_evento = time.time() + 1.2
+
 # --- 6. PROCESSAMENTO DOS CLIQUES ---
         if clique:
             # 1. BOTÕES DE CALIBRAÇÃO (Independentes)
@@ -381,27 +424,24 @@ while True:
                 som_nogo.play(); checks['som_nogo'] = True
             elif btn_cores_rect.collidepoint(mouse_pos):
                 checks['cores'] = True
+        
             
-            # 2. BOTÃO DE INICIAR (Separado, para todos os níveis!)
-            # Tirei do 'elif' e deixei como um 'if' próprio para garantir a execução
-            if btn_start_rect.collidepoint(mouse_pos) and pode_iniciar:
-                print("Iniciando o teste...")
-                tentativa_atual = 0
-                dados_coletados = []
-                erros_impulso = 0
-                erros_omissao = 0
-                lista_estimulos = (['GO']*14 + ['NOGO']*6)
-                random.shuffle(lista_estimulos)
-                estado = 'ESPERA'
-                proximo_evento = time.time() + 1.2
-
             # 3. BOTÕES DE ADMIN (Apenas se for Admin)
             if nivel_acesso == 1:
                 if btn_hist_rect.collidepoint(mouse_pos) and existe_db:
                     import dashboard
                     dashboard.gerar_analise()
                 elif btn_cad_rect.collidepoint(mouse_pos):
-                    cadastrar_novo_operador()            
+                    cadastrar_novo_operador()    
+
+            if clique and btn_voltar_rect.collidepoint(mouse_pos):
+                usuario_deslogando = usuario_atual # Guarda o nome para o agradecimento
+                estado = 'LOGOUT'
+                proximo_evento = agora + 2.5 # A tela vai durar 2.5 segundos
+                # Limpa os dados da sessão
+                usuario_atual = ""
+                input_texto = ""
+                for chave in checks: checks[chave] = False        
 
     elif estado in ['ESPERA', 'ESTIMULO', 'FEEDBACK']:
         desenhar_barra_progresso()
@@ -499,10 +539,7 @@ while True:
         mostrar_texto("Clique para voltar ao menu", CORES['CINZA_CLARO'], LARGURA/2, 550, 'p')
         
         if clique:
-            
-            # 2. O SEGREDO: Resetar os checks de calibração
-            # Ao colocar tudo como False, o botão "INICIAR" do Menu desaparece
-            # e o programa é obrigado a parar no Menu e esperar você testar tudo de novo.
+            #reset de variáveis
             checks = {
                 "som_L": False, 
                 "som_R": False, 
