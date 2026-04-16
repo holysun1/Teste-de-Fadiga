@@ -24,8 +24,9 @@ def inicializar_banco_operadores():
     if not os.path.exists(arquivo):
         try:
             with open(arquivo, 'w', encoding='utf-8') as f:
-                f.write("Nome,Nivel\n")
-                f.write("ADMIN,1\n") 
+                #Nova estrutura com CPF
+                f.write("Nome,CPF,Nivel\n")
+                f.write("ADMIN,00000000000,1\n") 
             print(f"Banco de Operadores criado em {arquivo}")
         except Exception as e:
             print(f"Erro ao criar {e}")
@@ -39,7 +40,6 @@ def resource_path(relative_path):
     except Exception:
         base_path = os.path.abspath(".")
     return os.path.join(base_path, relative_path)
-
 def cadastrar_novo_operador():
     
     # Prepara a janelinha suspensa
@@ -47,31 +47,73 @@ def cadastrar_novo_operador():
     root.withdraw() # Esconde a janela principal do tkinter
     root.attributes("-topmost", True) # Garante que ela apareça na frente do Pygame
 
-    novo_nome = simpledialog.askstring("Novo Cadastro", "Digite o nome do novo operador:")
+    caminho_csv = os.path.join(obter_caminho_externo(), "operadores.csv")
+    nome = simpledialog.askstring("Novo Cadastro", "Digite o nome do novo operador:")
     
-    if novo_nome:
-        nome_up = novo_nome.strip().upper()
-        caminho_csv = os.path.join(obter_caminho_externo(), "operadores.csv")
-        
+    if nome:
+        cpf = simpledialog.askstring("Novo Cadastro", "Digite o cpf do novo operador. Apenas Números")
+        if cpf and cpf.isdigit and len(cpf) == 11:
+            nome_up = nome.strip().upper()        
         try:
             # 1. Verifica se já existe para não duplicar "viga sobre viga"
-            df = pd.read_csv(caminho_csv)
+            df = pd.read_csv(caminho_csv, dtype={'CPF': str})
             # Use o nome da coluna EXATAMENTE como está no seu f.write ("Nome")
-            if nome_up in df['Nome'].str.upper().values:
-                messagebox.showwarning("Aviso", f"O operador {nome_up} já está cadastrado!")
+            if cpf in df['CPF'].values:
+                messagebox.showwarning("Aviso", f"CPF já cadastrado")
             else:
                 # 2. Adiciona ao arquivo (Nível 0 = Operador)
                 with open(caminho_csv, 'a', encoding='utf-8') as f:
-                    f.write(f"{nome_up},0\n")
+                    f.write(f"{nome_up},{cpf},0\n")
                 messagebox.showinfo("Sucesso", f"Operador {nome_up} cadastrado com sucesso!")
         
         except Exception as e:
             messagebox.showerror("Erro", f"Falha ao acessar banco de dados: {e}")
+    else:
+        messagebox.showerror("ERRO")
+        messagebox.showinfo("CPF INVÁLIDO, DIGITE OS 11 DIGITOS NUMÉRICOS")
     
     root.destroy() # Fecha a janelinha para não travar o Pygame
 
 
+
 inicializar_banco_operadores()
+
+def validar_login():
+    global estado, usuario_atual, nivel_acesso, mensagem_login, input_texto, input_senha, campo_focado    
+    caminho_csv = os.path.join(obter_caminho_externo(), "operadores.csv")
+    
+    if len(input_senha) < 4:
+        mensagem_login = "A SENHA DEVE TER 4 DÍGITOS!"
+        return
+
+    try:
+        df = pd.read_csv(caminho_csv, dtype={'CPF': str})
+        # 1. Limpeza dos dados de entrada
+        nome_busca = input_texto.strip().upper()
+        
+        # 2. Busca o usuário
+        user_row = df[df['Nome'].str.upper() == nome_busca]        
+        if not user_row.empty:
+            cpf_completo = str(user_row.iloc[0]['CPF']).strip()
+            # Compara os 4 últimos do CPF com o que foi digitado
+            if input_senha == cpf_completo[-4:]:
+                usuario_atual = nome_busca
+                nivel_acesso = int(user_row.iloc[0]['Nivel'])
+                estado = 'MENU'
+                # Limpa tudo para a próxima vez
+                input_texto = ""; input_senha = ""; campo_focado = "NOME"
+                print(f"✅ Login realizado: {usuario_atual}")
+            else:
+                mensagem_login = "SENHA INCORETA!"
+                input_senha = ""
+        else:
+            mensagem_login = "OPERADOR NÃO CADASTRADO!"
+    except Exception as e:
+        print(f"ERRO REAL NO TERMINAL: {e}")
+        mensagem_login = "ERRO AO ACESSAR O BANCO DE DADOS"
+
+
+
 
 # --- Inicialização ---
 pygame.init()
@@ -81,6 +123,8 @@ usuario_atual = ""
 nivel_acesso = 0
 estado = 'LOGIN'
 input_texto = ""
+input_senha = ""
+campo_focado = "NOME"
 input_ativo = True
 cursor_visivel = True
 ultimo_blink = time.time()
@@ -206,6 +250,8 @@ def desenhar_barra_progresso():
 clock = pygame.time.Clock()
 pygame.key.set_repeat(300,50)
 foi_salvo = False
+etapa_login ="NOME"
+input_senha = ""
 
 # --- Loop Principal ---
 while True:
@@ -229,54 +275,68 @@ while True:
             mensagem_login = ""
             #LÓGICA DE AUTENTICAÇÃO
             if event.key == pygame.K_RETURN:
-                if input_texto.upper() == "ADMIN":
-                    usuario_atual = "ADMIN"
-                    nivel_acesso = 1
-                    estado = 'MENU'
-                    input_texto = ""
+            
+                if campo_focado == "NOME":
+                    if input_texto.upper() == "ADMIN":
+                        usuario_atual = "ADMIN"
+                        nivel_acesso = 1
+                        estado = 'MENU'
+                        input_texto = ""
+                    else:
+                        campo_focado = "SENHA"
                 else:
-                    caminho_csv = os.path.join(obter_caminho_externo(), "operadores.csv")
-                    try:
-                        operadores_df = pd.read_csv(caminho_csv)
-                        if input_texto.upper() in operadores_df['Nome'].values:
-                            usuario_atual = input_texto.upper()
-                            nivel_acesso =0
-                            estado = 'MENU'
-                            input_texto =""
-                        else:
-                            mensagem_login = "Usuário não cadastrado!"
-                    except Exception as e:
-                            mensagem_login = "Erro ao acessar o banco de dados"
+                    validar_login()
+
             elif event.key == pygame.K_BACKSPACE:
-                input_texto = input_texto[:-1]
+                if campo_focado == "NOME": input_texto = input_texto[:-1]
+                else: input_senha = input_senha[:-1]
+
+            elif event.key == pygame.K_TAB: # Facilitador: TAB troca de campo
+                campo_focado = "SENHA" if campo_focado == "NOME" else "NOME"
+
             else:
                 if event.unicode.isprintable():
-                    input_texto += event.unicode 
+                    if campo_focado == "NOME":
+                        input_texto += event.unicode
+                    elif campo_focado == "SENHA" and len(input_senha) < 4:
+                        if event.unicode.isdigit(): # Garante que senha seja só número
+                            input_senha += event.unicode
 
                 
     # --- Lógica de Estados ---
     if estado == 'LOGIN':
         mostrar_texto("SISTEMA DE CONTROLE DE FADIGA", CORES['AMARELO'], LARGURA/2, 150, 'm')
-        mostrar_texto("Digite o nome do operador e aperte ENTER:", CORES['BRANCO'], LARGURA/2, 220, 'p')
-        
-        # Desenho da caixa de texto
-        box_rect = pygame.Rect(LARGURA/2 - 150, 260, 300, 50)
-        pygame.draw.rect(tela, CORES['CINZA_ESC'], box_rect, border_radius=5)
-        pygame.draw.rect(tela, CORES['AZUL'], box_rect, 2, border_radius=5)
 
-        # --- DESENHO DA MENSAGEM DE ERRO ---
-        if mensagem_login:
-            mostrar_texto(mensagem_login, (255, 50, 50), LARGURA/2, 350, 'p')
+        # --- CAMPO NOME ---
+        mostrar_texto("NOME DO OPERADOR:", CORES['BRANCO'], LARGURA/2, 180, 'p')
+        cor_borda_nome = CORES['AZUL'] if campo_focado == "NOME" else CORES['CINZA_ESC']
+        rect_nome = pygame.Rect(LARGURA/2 - 150, 200, 300, 45)
+        pygame.draw.rect(tela, (30,30,30), rect_nome, border_radius=5)
+        pygame.draw.rect(tela, cor_borda_nome, rect_nome, 2, border_radius=5)
         
-        # Lógica do Cursor piscante
-        if time.time() - ultimo_blink > 0.5:
-            cursor_visivel = not cursor_visivel
-            ultimo_blink = time.time()
-            
-        txt_display = input_texto + ("|" if cursor_visivel else "")
-        mostrar_texto(txt_display, CORES['BRANCO'], LARGURA/2, 285, 'm')
-        pass
-    
+        txt_nome = input_texto + ("|" if cursor_visivel and campo_focado == "NOME" else "")
+        mostrar_texto(txt_nome, CORES['BRANCO'], LARGURA/2, 222, 'p')
+
+        # --- CAMPO SENHA ---
+        mostrar_texto("SENHA (4 DÍGITOS DO CPF):", CORES['BRANCO'], LARGURA/2, 280, 'p')
+        cor_borda_senha = CORES['AZUL'] if campo_focado == "SENHA" else CORES['CINZA_ESC']
+        rect_senha = pygame.Rect(LARGURA/2 - 150, 300, 300, 45)
+        pygame.draw.rect(tela, (30,30,30), rect_senha, border_radius=5)
+        pygame.draw.rect(tela, cor_borda_senha, rect_senha, 2, border_radius=5)
+        
+        # Mostra asteriscos para a senha
+        txt_senha = ("*" * len(input_senha)) + ("|" if cursor_visivel and campo_focado == "SENHA" else "")
+        mostrar_texto(txt_senha, CORES['VERDE'], LARGURA/2, 322, 'p')
+
+        # --- MENSAGEM DE ERRO ---
+        if mensagem_login:
+            mostrar_texto(mensagem_login, (255, 50, 50), LARGURA/2, 380, 'p')
+
+        # Clique com o mouse para trocar de campo
+        if clique:
+            if rect_nome.collidepoint(mouse_pos): campo_focado = "NOME"
+            elif rect_senha.collidepoint(mouse_pos): campo_focado = "SENHA"
+        
     elif estado == 'LOGOUT':
         tela.fill(CORES['PRETO']) # Garante a tela preta
         
@@ -287,6 +347,7 @@ while True:
         # Quando o tempo acabar, volta para o Login
         if agora >= proximo_evento:
             estado = 'LOGIN'
+            etapa_login = ""
 
     elif estado == 'MENU':
         # --- 1. CONFIGURAÇÃO DE COORDENADAS (DEFINIR UMA VEZ SÓ) ---
@@ -437,7 +498,7 @@ while True:
             if clique and btn_voltar_rect.collidepoint(mouse_pos):
                 usuario_deslogando = usuario_atual # Guarda o nome para o agradecimento
                 estado = 'LOGOUT'
-                proximo_evento = agora + 2.5 # A tela vai durar 2.5 segundos
+                proximo_evento = agora + 2 # A tela vai durar 2 segundos
                 # Limpa os dados da sessão
                 usuario_atual = ""
                 input_texto = ""
