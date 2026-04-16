@@ -5,7 +5,11 @@ import sys
 import os
 import csv
 import numpy as np
+import pandas as pd
 from datetime import datetime
+import tkinter as tk
+from tkinter import simpledialog, messagebox
+import sys
 
 def obter_caminho_externo():
     if getattr(sys, 'frozen', False): 
@@ -14,8 +18,19 @@ def obter_caminho_externo():
     # Se estiver rodando como .py, olha para a pasta do script
     return os.path.dirname(os.path.abspath(__file__))
 
+def inicializar_banco_operadores():
+    caminho_base = obter_caminho_externo()
+    arquivo = os.path.join(obter_caminho_externo(), "operadores.csv")
+    if not os.path.exists(arquivo):
+        try:
+            with open(arquivo, 'w', encoding='utf-8') as f:
+                f.write("Nome,Nivel\n")
+                f.write("ADMIN,1\n") 
+            print(f"Banco de Operadores criado em {arquivo}")
+        except Exception as e:
+            print(f"Erro ao criar {e}")
+        print(f"O arquivo já existe:{arquivo}")
 
-import sys
 def resource_path(relative_path):
     """ Retorna o caminho absoluto para o recurso, seja no modo script ou .exe """
     try:
@@ -25,14 +40,47 @@ def resource_path(relative_path):
         base_path = os.path.abspath(".")
     return os.path.join(base_path, relative_path)
 
+def cadastrar_novo_operador():
+    
+    # Prepara a janelinha suspensa
+    root = tk.Tk()
+    root.withdraw() # Esconde a janela principal do tkinter
+    root.attributes("-topmost", True) # Garante que ela apareça na frente do Pygame
+
+    novo_nome = simpledialog.askstring("Novo Cadastro", "Digite o nome do novo operador:")
+    
+    if novo_nome:
+        nome_up = novo_nome.strip().upper()
+        caminho_csv = os.path.join(obter_caminho_externo(), "operadores.csv")
+        
+        try:
+            # 1. Verifica se já existe para não duplicar "viga sobre viga"
+            df = pd.read_csv(caminho_csv)
+            # Use o nome da coluna EXATAMENTE como está no seu f.write ("Nome")
+            if nome_up in df['Nome'].str.upper().values:
+                messagebox.showwarning("Aviso", f"O operador {nome_up} já está cadastrado!")
+            else:
+                # 2. Adiciona ao arquivo (Nível 0 = Operador)
+                with open(caminho_csv, 'a', encoding='utf-8') as f:
+                    f.write(f"{nome_up},0\n")
+                messagebox.showinfo("Sucesso", f"Operador {nome_up} cadastrado com sucesso!")
+        
+        except Exception as e:
+            messagebox.showerror("Erro", f"Falha ao acessar banco de dados: {e}")
+    
+    root.destroy() # Fecha a janelinha para não travar o Pygame
 
 
+inicializar_banco_operadores()
 
 # --- Inicialização ---
 pygame.init()
 pygame.mixer.init()
 
 usuario_atual = ""
+nivel_acesso = 0
+estado = 'LOGIN'
+input_texto = ""
 input_ativo = True
 cursor_visivel = True
 ultimo_blink = time.time()
@@ -176,15 +224,32 @@ while True:
         
         # Lógica de teclado APENAS se estiver no LOGIN
         if event.type == pygame.KEYDOWN and estado == 'LOGIN':
+            #LÓGICA DE AUTENTICAÇÃO
             if event.key == pygame.K_RETURN:
-                if len(usuario_atual) > 2: 
+                if input_texto.upper() == "ADMIN":
+                    usuario_atual = "ADMIN"
+                    nivel_acesso = 1
                     estado = 'MENU'
+                    input_texto = ""
+                else:
+                    caminho_csv = os.path.join(obter_caminho_externo(), "operadores.csv")
+                    try:
+                        operadores_df = pd.read_csv(caminho_csv)
+                        if input_texto.upper() in operadores_df['Nome'].values:
+                            usuario_atual = input_texto.upper()
+                            nivel_acesso =0
+                            estado = 'MENU'
+                            input_texto =""
+                        else:
+                            print("Usuário não cadastrado!")
+                    except Exception as e:
+                            print(f"Erro ao ler o banco de dados: {e}")
             elif event.key == pygame.K_BACKSPACE:
-                usuario_atual = usuario_atual[:-1]
-            elif event.key != pygame.K_ESCAPE:
-                if len(usuario_atual) < 15:
-                    if event.unicode.isprintable() and event.unicode != '\r':
-                        usuario_atual += event.unicode
+                input_texto = input_texto[:-1]
+            else:
+                if event.unicode.isprintable():
+                    input_texto += event.unicode 
+                
 
     # --- Lógica de Estados ---
     if estado == 'LOGIN':
@@ -201,127 +266,142 @@ while True:
             cursor_visivel = not cursor_visivel
             ultimo_blink = time.time()
             
-        txt_display = usuario_atual + ("|" if cursor_visivel else "")
+        txt_display = input_texto + ("|" if cursor_visivel else "")
         mostrar_texto(txt_display, CORES['BRANCO'], LARGURA/2, 285, 'm')
         pass
             
-# Lógica de cliques (para o resto do sistema)
     elif estado == 'MENU':
-        btn_L_rect = pygame.Rect(150, 160, 230, 45)
-        btn_R_rect = pygame.Rect(420, 160, 230, 45)
-        btn_go_rect = pygame.Rect(150, 260, 230, 45)
-        btn_nogo_rect = pygame.Rect(420, 260, 230, 45)
-        btn_cores_rect = pygame.Rect(150, 330, 230, 45)
-        btn_hist_rect = pygame.Rect(420, 330, 230, 45)
+        # --- 1. CONFIGURAÇÃO DE COORDENADAS (DEFINIR UMA VEZ SÓ) ---
+        margem_x = LARGURA / 2
         
-        if event.type == pygame.MOUSEBUTTONDOWN:
-                clique = True
-        mostrar_texto("CALIBRAÇÃO DE ESTÍMULOS", CORES['AMARELO'], LARGURA/2, 80, 'g')
-        mostrar_texto("Complete o preparo antes de iniciar:", CORES['BRANCO'], LARGURA/2, 150, 'p')
-        # --- BOTÕES DE ÁUDIO (L/R) ---
-        # Canal Esquerdo
-        pygame.draw.rect(tela, CORES['OK'] if checks['som_L'] else CORES['CINZA_ESC'], btn_L_rect, border_radius=8)
-        mostrar_texto("TESTAR ESQUERDO (L)", CORES['BRANCO'], 265, 182, 'p')
+        # Linha 1: Áudio L/R
+        btn_L_rect = pygame.Rect(margem_x - 240, 140, 230, 45)
+        btn_R_rect = pygame.Rect(margem_x + 10, 140, 230, 45)
 
-        # Canal Direito
-        pygame.draw.rect(tela, CORES['OK'] if checks['som_R'] else CORES['CINZA_ESC'], btn_R_rect, border_radius=8)
-        mostrar_texto("TESTAR DIREITO (R)", CORES['BRANCO'], 535, 182, 'p')
+        # Linha 2: BIPs (Abaixo da linha divisória)
+        btn_go_rect = pygame.Rect(margem_x - 240, 260, 230, 45)
+        btn_nogo_rect = pygame.Rect(margem_x + 10, 260, 230, 45)
 
-        # --- 2. REVISÃO DE ESTÍMULOS (GO/NOGO) ---
-        mostrar_texto("2. Reconheça os sinais do teste:", CORES['BRANCO'], LARGURA/2, 235, 'p')
-        btn_go_rect = pygame.Rect(150, 260, 230, 45) 
-        btn_nogo_rect = pygame.Rect(420, 260, 230, 45)
+        # Linha 3: Cores
+        btn_cores_rect = pygame.Rect(margem_x - 115, 320, 230, 45) # Centralizado
+
+        # Painel Admin (Canto inferior direito)
+        btn_hist_rect = pygame.Rect(LARGURA - 210, 420, 180, 45)
+        btn_cad_rect = pygame.Rect(LARGURA - 210, 480, 180, 45)
+
+        # Botão Iniciar (Centro Inferior)
+        btn_start_rect = pygame.Rect(margem_x - 150, 480, 300, 70)
+
+
+        # --- 3. DESENHO DA INTERFACE ---
         
-        pygame.draw.rect(tela, CORES['OK'] if checks.get('som_go') else CORES['CINZA_ESC'], btn_go_rect, border_radius=8)
-        mostrar_texto("BIP AGUDO (GO)", CORES['BRANCO'], 265, 282, 'p')
+        # Cabeçalho
+        mostrar_texto("CALIBRAÇÃO DE ESTÍMULOS", CORES['AMARELO'], margem_x, 50, 'g')
+        mostrar_texto(f"BEM-VINDO, {usuario_atual}", CORES['BRANCO'], margem_x, 90, 'p')
+        mostrar_texto("Complete o preparo antes de iniciar:", CORES['CINZA_CLARO'], margem_x, 120, 'p')
 
-        pygame.draw.rect(tela, CORES['OK'] if checks.get('som_nogo') else CORES['CINZA_ESC'], btn_nogo_rect, border_radius=8)
-        mostrar_texto("BIP GRAVE (NOGO)", CORES['BRANCO'], 535, 282, 'p')        
-        # --- BOTÃO: REVISAR CORES ---
-        btn_cores_rect = pygame.Rect(150, 300, 230, 50)
-        cor_cores = CORES['OK'] if checks['cores'] else CORES['CINZA_ESC']
-        pygame.draw.rect(tela, cor_cores, btn_cores_rect,  border_radius=8)
-        
-        # Se o mouse estiver em cima, desenha os exemplos de cores ao lado do texto
-        if btn_cores_rect.collidepoint(mouse_pos):
-            mostrar_texto("REVISAR CORES", CORES['BRANCO'], 245, 325, 'p') # Texto um pouco para a esquerda
-            pygame.draw.rect(tela, CORES['VERDE'], (330, 315, 20, 20))    # Exemplo Verde
-            pygame.draw.rect(tela, CORES['VERMELHO'], (355, 315, 20, 20)) # Exemplo Vermelho
+        # Desenho Bloco 1: Áudio
+        cor_l = CORES['OK'] if checks.get('som_L') else CORES['CINZA_ESC']
+        pygame.draw.rect(tela, cor_l, btn_L_rect, border_radius=8)
+        mostrar_texto("TESTAR ESQUERDO (L)", CORES['BRANCO'], btn_L_rect.centerx, btn_L_rect.centery, 'p')
+
+        cor_r = CORES['OK'] if checks.get('som_R') else CORES['CINZA_ESC']
+        pygame.draw.rect(tela, cor_r, btn_R_rect, border_radius=8)
+        mostrar_texto("TESTAR DIREITO (R)", CORES['BRANCO'], btn_R_rect.centerx, btn_R_rect.centery, 'p')
+
+        # Divisor Central
+        pygame.draw.line(tela, CORES['CINZA_ESC'], (100, 220), (LARGURA-100, 220), 2)
+        mostrar_texto("RECONHECIMENTO DE SINAIS", CORES['AMARELO'], margem_x, 220, 'p')
+
+        # Desenho Bloco 2: BIPs
+        cor_go = CORES['OK'] if checks.get('som_go') else CORES['CINZA_ESC']
+        pygame.draw.rect(tela, cor_go, btn_go_rect, border_radius=8)
+        mostrar_texto("BIP AGUDO (GO)", CORES['BRANCO'], btn_go_rect.centerx, btn_go_rect.centery, 'p')
+
+        cor_nogo = CORES['OK'] if checks.get('som_nogo') else CORES['CINZA_ESC']
+        pygame.draw.rect(tela, cor_nogo, btn_nogo_rect, border_radius=8)
+        mostrar_texto("BIP GRAVE (NOGO)", CORES['BRANCO'], btn_nogo_rect.centerx, btn_nogo_rect.centery, 'p')
+
+        # Desenho Bloco 3: Cores
+        cor_cores = CORES['OK'] if checks.get('cores') else CORES['CINZA_ESC']
+        pygame.draw.rect(tela, cor_cores, btn_cores_rect, border_radius=8)
+        mostrar_texto("REVISAR CORES", CORES['BRANCO'], btn_cores_rect.centerx, btn_cores_rect.centery, 'p')
+        if btn_cores_rect.collidepoint(mouse_pos):      
+            # Amostra VERDE (GO) - Posicionada relativa ao botão
+            pygame.draw.rect(tela, CORES['VERDE'], (btn_cores_rect.centerx + -110, btn_cores_rect.centery - 10, 20, 20), border_radius=4)
+            
+            # Amostra VERMELHA (NOGO) - Posicionada relativa ao botão
+            pygame.draw.rect(tela, CORES['VERMELHO'], (btn_cores_rect.centerx + 90, btn_cores_rect.centery - 10, 20, 20), border_radius=4)
+            
             if clique:
                 checks['cores'] = True
         else:
-            mostrar_texto("REVISAR CORES", CORES['BRANCO'], 265, 325, 'p') # Texto centralizado normal
+            # Texto centralizado normal quando o mouse não está em cima
+            mostrar_texto("REVISAR CORES", CORES['BRANCO'], btn_cores_rect.centerx, btn_cores_rect.centery, 'p')
 
-        # --- BOTÃO: VER HISTÓRICO ---
-        # --- Lógica de Verificação de Banco de Dados ---
-        pasta_db = obter_caminho_externo()
-        arquivo_db = os.path.join(pasta_db, "log_foco_detalhado.csv")
-        existe_db = os.path.exists(arquivo_db)
+        # --- 4. ZONA ADMIN (SÓ SE FOR NÍVEL 1) ---
+        if nivel_acesso == 1:
+            # Histórico
+            pasta_db = obter_caminho_externo()
+            existe_db = os.path.exists(os.path.join(pasta_db, "log_foco_detalhado.csv"))
+            cor_hist = CORES['AZUL'] if existe_db else (100, 100, 100)
+            
+            pygame.draw.rect(tela, cor_hist, btn_hist_rect, border_radius=8)
+            mostrar_texto("HISTÓRICO GERAL", CORES['BRANCO'], btn_hist_rect.centerx, btn_hist_rect.centery, 'p')
+            
+            # Novo Operador
+            pygame.draw.rect(tela, (200, 100, 0), btn_cad_rect, border_radius=8)
+            mostrar_texto("NOVO OPERADOR", CORES['BRANCO'], btn_cad_rect.centerx, btn_cad_rect.centery, 'p')
 
-        # --- Desenho do Botão de Histórico ---
-        # Se não existe banco, desenha em cinza, se existe, desenha na cor normal
-        cor_btn_hist = CORES['AZUL'] if existe_db else (100, 100, 100) # Cinza se vazio
+        # --- 5. BOTÃO INICIAR / BLOQUEADO ---
+        pode_iniciar = all(checks.values())
+        cor_start = CORES['VERDE'] if pode_iniciar else CORES['CINZA_ESC']
         
-        # (Aqui vai o seu código de desenhar o retângulo do botão de histórico)
-        pygame.draw.rect(tela, cor_btn_hist, btn_hist_rect, border_radius=5)
-        mostrar_texto("HISTÓRICO", CORES['BRANCO'], btn_hist_rect.centerx, btn_hist_rect.centery, 'p')
+        pygame.draw.rect(tela, cor_start, btn_start_rect, border_radius=12)
+        if not pode_iniciar:
+            pygame.draw.rect(tela, (150, 0, 0), btn_start_rect, 2, border_radius=12)
+            mostrar_texto("BLOQUEADO", CORES['BRANCO'], btn_start_rect.centerx, btn_start_rect.centery, 'm')
+        else:
+            mostrar_texto("INICIAR TESTE", CORES['BRANCO'], btn_start_rect.centerx, btn_start_rect.centery, 'm')
 
-# --- LÓGICA DE CLIQUE ATUALIZADA ---
+# --- 6. PROCESSAMENTO DOS CLIQUES ---
         if clique:
+            # 1. BOTÕES DE CALIBRAÇÃO (Independentes)
             if btn_L_rect.collidepoint(mouse_pos):
                 canal = som_go.play()
-                if canal: # Proteção extra: só ajusta volume se o canal foi criado
-                    canal.set_volume(1.0, 0.0)
+                if canal: canal.set_volume(1.0, 0.0)
                 checks['som_L'] = True
-                
             elif btn_R_rect.collidepoint(mouse_pos):
                 canal = som_go.play()
-                if canal:
-                    canal.set_volume(0.0, 1.0)
+                if canal: canal.set_volume(0.0, 1.0)
                 checks['som_R'] = True
-                
             elif btn_go_rect.collidepoint(mouse_pos):
-                som_go.play()
-                checks['som_go'] = True
-                
+                som_go.play(); checks['som_go'] = True
             elif btn_nogo_rect.collidepoint(mouse_pos):
-                som_nogo.play()
-                checks['som_nogo'] = True            
-                
-            elif btn_cores_rect.collidepoint(mouse_pos): 
+                som_nogo.play(); checks['som_nogo'] = True
+            elif btn_cores_rect.collidepoint(mouse_pos):
                 checks['cores'] = True
-                
-            elif btn_hist_rect.collidepoint(mouse_pos):
-                if existe_db:
+            
+            # 2. BOTÃO DE INICIAR (Separado, para todos os níveis!)
+            # Tirei do 'elif' e deixei como um 'if' próprio para garantir a execução
+            if btn_start_rect.collidepoint(mouse_pos) and pode_iniciar:
+                print("Iniciando o teste...")
+                tentativa_atual = 0
+                dados_coletados = []
+                erros_impulso = 0
+                erros_omissao = 0
+                lista_estimulos = (['GO']*14 + ['NOGO']*6)
+                random.shuffle(lista_estimulos)
+                estado = 'ESPERA'
+                proximo_evento = time.time() + 1.2
+
+            # 3. BOTÕES DE ADMIN (Apenas se for Admin)
+            if nivel_acesso == 1:
+                if btn_hist_rect.collidepoint(mouse_pos) and existe_db:
                     import dashboard
                     dashboard.gerar_analise()
-                else:
-                    # Opcional: Avisar o usuário que não tem dados
-                    print("Banco de dados vazio. Faça um teste primeiro.")
-
-        # --- BOTÃO INICIAR ---
-        pode_iniciar = all(checks.values())
-        btn_start_rect = pygame.Rect(LARGURA/2 - 120, 450, 240, 70)
-        cor_start = CORES['VERDE'] if pode_iniciar else CORES['CINZA_ESC']
-        if pode_iniciar and btn_start_rect.collidepoint(mouse_pos): cor_start = CORES['AZUL']
-        
-        pygame.draw.rect(tela, cor_start, btn_start_rect, border_radius=15)
-        txt_btn = "INICIAR TESTE" if pode_iniciar else "BLOQUEADO"
-        mostrar_texto(txt_btn, CORES['BRANCO'], LARGURA/2, 485, 'm')
-
-        if not pode_iniciar:
-            mostrar_texto("Complete todos os testes acima para liberar", CORES['VERMELHO'], LARGURA/2, 430, 'p')
-
-        if btn_start_rect.collidepoint(mouse_pos) and clique and pode_iniciar:
-            tentativa_atual = 0
-            dados_coletados = []
-            erros_impulso = 0
-            erros_omissao = 0
-            lista_estimulos = (['GO']*7+['NOGO']*6)
-            random.shuffle(lista_estimulos)
-            if 'salvo' in locals(): del salvo
-            estado = 'ESPERA'
-            proximo_evento = time.time() +1.2
+                elif btn_cad_rect.collidepoint(mouse_pos):
+                    cadastrar_novo_operador()            
 
     elif estado in ['ESPERA', 'ESTIMULO', 'FEEDBACK']:
         desenhar_barra_progresso()
