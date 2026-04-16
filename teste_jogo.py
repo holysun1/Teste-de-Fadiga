@@ -8,7 +8,7 @@ import numpy as np
 from datetime import datetime
 
 def obter_caminho_externo():
-    if getattr(sys, 'frozen', False):
+    if getattr(sys, 'frozen', False): 
         # Se estiver rodando como .exe, olha para a pasta do executável
         return os.path.dirname(sys.executable)
     # Se estiver rodando como .py, olha para a pasta do script
@@ -317,28 +317,41 @@ while True:
             dados_coletados = []
             erros_impulso = 0
             erros_omissao = 0
+            lista_estimulos = (['GO']*7+['NOGO']*6)
+            random.shuffle(lista_estimulos)
             if 'salvo' in locals(): del salvo
             estado = 'ESPERA'
-            proximo_evento = 0
+            proximo_evento = time.time() +1.2
 
     elif estado in ['ESPERA', 'ESTIMULO', 'FEEDBACK']:
         desenhar_barra_progresso()
         if estado == 'ESPERA':
-            mostrar_texto("Aguarde o estímulo...", CORES['CINZA_CLARO'], LARGURA/2, ALTURA/2 + 200, 'p')
-            if proximo_evento == 0: proximo_evento = agora + random.uniform(1.5, 3.5)
             if agora >= proximo_evento:
-                tipo_atual = random.choice(['VISUAL', 'SONORO'])
-                subtipo_atual = 'GO' if random.random() < 0.7 else 'NOGO'
-                estado = 'ESTIMULO'; momento_estimulo = agora; proximo_evento = agora + 1.2
-                if tipo_atual == 'SONORO': som_go.play() if subtipo_atual == 'GO' else som_nogo.play()
+                if not lista_estimulos: estado = 'FIM'
+                else:
+                    mostrar_texto("Aguarde o estímulo...", CORES['CINZA_CLARO'], LARGURA/2, ALTURA/2 + 200, 'p')
+                    tipo_atual = random.choice(['VISUAL', 'SONORO'])
+                    subtipo_atual = lista_estimulos.pop()
 
-        elif estado == 'ESTIMULO':
+                    momento_estimulo = agora;
+                    estado = 'ESTIMULO';
+                    proximo_evento = agora + 1.2
+
+                    if tipo_atual == 'SONORO':
+                        if subtipo_atual == 'GO':
+                            som_go.play()
+                        else:
+                            som_nogo.play()
+            
+
+        elif estado == 'ESTIMULO':       
             if tipo_atual == 'VISUAL':
                 cor = CORES['VERDE'] if subtipo_atual == 'GO' else CORES['VERMELHO']
                 pygame.draw.rect(tela, cor, (LARGURA/2-80, ALTURA/2-80, 160, 160), border_radius=15)
             else:
                 pygame.draw.circle(tela, CORES['AZUL'], (LARGURA/2, ALTURA/2), 40)
-            
+
+     
             if clique:
                 if subtipo_atual == 'GO':
                     latencia = (agora - momento_estimulo) * 1000
@@ -348,11 +361,12 @@ while True:
                 else:
                     erros_impulso += 1
                     estado = 'FEEDBACK'; proximo_evento = agora + 0.6
+
             elif agora >= proximo_evento:
                 if subtipo_atual == 'GO': erros_omissao += 1
                 tentativa_atual += 1
                 estado = 'ESPERA' if tentativa_atual < TENTATIVAS_TOTAIS else 'FIM'
-                proximo_evento = 0
+                proximo_evento = agora + random.uniform(1.5,3.0)
 
         elif estado == 'FEEDBACK':
             txt = "CORRETO!" if subtipo_atual == 'GO' else "ERRO!"
@@ -361,7 +375,7 @@ while True:
             if agora >= proximo_evento:
                 tentativa_atual += 1
                 estado = 'ESPERA' if tentativa_atual < TENTATIVAS_TOTAIS else 'FIM'
-                proximo_evento = 0
+                proximo_evento = agora + random.uniform(1.0,3.5)
 
     elif estado == 'FIM':
         if not foi_salvo:
