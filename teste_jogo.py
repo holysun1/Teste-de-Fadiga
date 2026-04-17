@@ -32,14 +32,26 @@ def inicializar_banco_operadores():
             print(f"Erro ao criar {e}")
         print(f"O arquivo já existe:{arquivo}")
 
+
 def resource_path(relative_path):
-    """ Retorna o caminho absoluto para o recurso, seja no modo script ou .exe """
+    """ Encontra o caminho real do arquivo, seja no VS Code ou no EXE """
     try:
-        # Caminho da pasta temporária do PyInstaller
+        # Caminho temporário criado pelo PyInstaller
         base_path = sys._MEIPASS
     except Exception:
         base_path = os.path.abspath(".")
     return os.path.join(base_path, relative_path)
+
+# --- CARREGAMENTO SEGURO DOS SONS ---
+try:
+    som_go = pygame.mixer.Sound(resource_path("som_go.wav"))
+    som_nogo = pygame.mixer.Sound(resource_path("som_nogo.wav"))
+    audio_on = True
+except Exception as e:
+    print(f"Aviso: Não foi possível carregar os sons: {e}")
+    audio_on = False
+
+
 def cadastrar_novo_operador():
     
     # Prepara a janelinha suspensa
@@ -79,12 +91,9 @@ def cadastrar_novo_operador():
 inicializar_banco_operadores()
 
 def validar_login():
-    global estado, usuario_atual, nivel_acesso, mensagem_login, input_texto, input_senha, campo_focado    
+    global estado, usuario_atual, nivel_acesso, mensagem_login, input_texto, input_senha, campo_focado,proximo_evento
     caminho_csv = os.path.join(obter_caminho_externo(), "operadores.csv")
-    
-    if len(input_senha) < 4:
-        mensagem_login = "A SENHA DEVE TER 4 DÍGITOS!"
-        return
+    estado = 'LOGIN'
 
     try:
         df = pd.read_csv(caminho_csv, dtype={'CPF': str})
@@ -95,17 +104,24 @@ def validar_login():
         user_row = df[df['Nome'].str.upper() == nome_busca]        
         if not user_row.empty:
             cpf_completo = str(user_row.iloc[0]['CPF']).strip()
-            # Compara os 4 últimos do CPF com o que foi digitado
-            if input_senha == cpf_completo[-4:]:
+            
+            # 1. Checagem de Quantidade (Menos de 4 dígitos)
+            if len(input_senha) < 4:
+                mensagem_login = "A SENHA DEVE CONTER 4 DÍGITOS!"
+                # Não limpamos a senha aqui para o usuário terminar de digitar
+            
+            # 2. Checagem de Validade (Se tem 4, mas está errada)
+            elif input_senha != cpf_completo[:4]:
+                mensagem_login = "SENHA INCORRETA!"
+                input_senha = "" # Limpa para ele tentar de novo do zero
+            
+            # 3. Sucesso (Tem 4 e está correta)
+            else:
                 usuario_atual = nome_busca
                 nivel_acesso = int(user_row.iloc[0]['Nivel'])
-                estado = 'MENU'
-                # Limpa tudo para a próxima vez
+                estado = 'CARREGANDO'
+                proximo_evento = time.time() + 2.0
                 input_texto = ""; input_senha = ""; campo_focado = "NOME"
-                print(f"✅ Login realizado: {usuario_atual}")
-            else:
-                mensagem_login = "SENHA INCORETA!"
-                input_senha = ""
         else:
             mensagem_login = "OPERADOR NÃO CADASTRADO!"
     except Exception as e:
@@ -145,6 +161,12 @@ CORES = {
 
 LARGURA, ALTURA = 800, 600
 tela = pygame.display.set_mode((LARGURA, ALTURA))
+try:
+    icone_imagem = pygame.image.load(resource_path("icon.png"))
+    pygame.display.set_icon(icone_imagem)
+except Exception as e:
+    print(f"Aviso: Ícone não carregado: {e}")
+pygame.display.set_icon(icone_imagem)
 pygame.display.set_caption("Controle de Fadiga PCP - Eng. Diego Vieira")
 
 fontes = {
@@ -305,6 +327,8 @@ while True:
                 
     # --- Lógica de Estados ---
     if estado == 'LOGIN':
+        usuario_atual = ""
+        proximo_evento = 0
         mostrar_texto("SISTEMA DE CONTROLE DE FADIGA", CORES['AMARELO'], LARGURA/2, 150, 'm')
 
         # --- CAMPO NOME ---
@@ -318,7 +342,7 @@ while True:
         mostrar_texto(txt_nome, CORES['BRANCO'], LARGURA/2, 222, 'p')
 
         # --- CAMPO SENHA ---
-        mostrar_texto("SENHA (4 DÍGITOS DO CPF):", CORES['BRANCO'], LARGURA/2, 280, 'p')
+        mostrar_texto("SENHA (4 PRIMEIROS DÍGITOS DO CPF):", CORES['BRANCO'], LARGURA/2, 280, 'p')
         cor_borda_senha = CORES['AZUL'] if campo_focado == "SENHA" else CORES['CINZA_ESC']
         rect_senha = pygame.Rect(LARGURA/2 - 150, 300, 300, 45)
         pygame.draw.rect(tela, (30,30,30), rect_senha, border_radius=5)
@@ -328,14 +352,29 @@ while True:
         txt_senha = ("*" * len(input_senha)) + ("|" if cursor_visivel and campo_focado == "SENHA" else "")
         mostrar_texto(txt_senha, CORES['VERDE'], LARGURA/2, 322, 'p')
 
-        # --- MENSAGEM DE ERRO ---
-        if mensagem_login:
-            mostrar_texto(mensagem_login, (255, 50, 50), LARGURA/2, 380, 'p')
 
         # Clique com o mouse para trocar de campo
         if clique:
             if rect_nome.collidepoint(mouse_pos): campo_focado = "NOME"
             elif rect_senha.collidepoint(mouse_pos): campo_focado = "SENHA"
+
+        # --- NOVO BOTÃO ENTRAR ---
+        btn_entrar_rect = pygame.Rect(LARGURA/2 - 75, 360, 150, 45)
+        
+        # Hover: Cinza (100,100,100) para Verde
+        cor_btn = CORES['VERDE'] if btn_entrar_rect.collidepoint(mouse_pos) else (100, 100, 100)
+        
+        pygame.draw.rect(tela, cor_btn, btn_entrar_rect, border_radius=10)
+        mostrar_texto("ENTRAR", CORES['BRANCO'], btn_entrar_rect.centerx, btn_entrar_rect.centery, 'p')
+
+        # --- MENSAGEM DE ERRO (REPOSICIONADA ABAIXO DO BOTÃO) ---
+        if mensagem_login:
+            # Y ajustado para 425 para dar respiro ao botão
+            mostrar_texto(mensagem_login, (255, 50, 50), LARGURA/2, 425, 'p')
+
+        # Lógica de Clique no Botão
+        if clique and btn_entrar_rect.collidepoint(mouse_pos):
+            validar_login()
         
     elif estado == 'LOGOUT':
         tela.fill(CORES['PRETO']) # Garante a tela preta
@@ -348,6 +387,21 @@ while True:
         if agora >= proximo_evento:
             estado = 'LOGIN'
             etapa_login = ""
+
+    elif estado == 'CARREGANDO':
+        tela.fill(CORES['PRETO'])
+        
+        # Centraliza o texto de carregamento
+        mostrar_texto("AUTENTICANDO OPERADOR...", CORES['AMARELO'], LARGURA/2, ALTURA/2 - 20, 'p')
+        
+        # Opcional: Uma barra de progresso simples
+        progresso = 1.0 - (proximo_evento - agora) / 2.0 # Vai de 0 a 1
+        largura_barra = 300 * max(0, min(1, progresso))
+        pygame.draw.rect(tela, (50, 50, 50), (LARGURA/2 - 150, ALTURA/2 + 20, 300, 10), border_radius=5)
+        pygame.draw.rect(tela, CORES['VERDE'], (LARGURA/2 - 150, ALTURA/2 + 20, largura_barra, 10), border_radius=5)
+
+        if agora >= proximo_evento:
+            estado = 'MENU'
 
     elif estado == 'MENU':
         # --- 1. CONFIGURAÇÃO DE COORDENADAS (DEFINIR UMA VEZ SÓ) ---
@@ -457,7 +511,7 @@ while True:
 
         # 2. BOTÃO DE INICIAR (Separado, para todos os níveis!)
         # Tirei do 'elif' e deixei como um 'if' próprio para garantir a execução
-        if btn_start_rect.collidepoint(mouse_pos) and pode_iniciar:
+        if btn_start_rect.collidepoint(mouse_pos) and pode_iniciar and clique:
             print("Iniciando o teste...")
             tentativa_atual = 0
             dados_coletados = []
