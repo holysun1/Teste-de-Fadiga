@@ -10,6 +10,7 @@ from datetime import datetime
 import tkinter as tk
 from tkinter import simpledialog, messagebox
 import sys
+import matplotlib.pyplot as plt
 
 def obter_caminho_externo():
     if getattr(sys, 'frozen', False): 
@@ -51,6 +52,62 @@ except Exception as e:
     print(f"Aviso: Não foi possível carregar os sons: {e}")
     audio_on = False
 
+def gerar_grafico_fadiga_sono():
+    pasta_db = obter_caminho_externo()
+    caminho_arquivo = os.path.join(pasta_db, "log_foco_detalhado.csv")
+    
+    if not os.path.exists(caminho_arquivo):
+        print("Arquivo de log não encontrado.")
+        return
+
+    try:
+        # 1. Lê o banco avisando o Pandas sobre os acentos (tenta utf-8, se falhar tenta latin1)
+        try:
+            df = pd.read_csv(caminho_arquivo, encoding='utf-8-sig')
+        except UnicodeDecodeError:
+            df = pd.read_csv(caminho_arquivo, encoding='latin1')
+        
+        # 2. Verifica se a coluna exata que criamos existe
+        if 'horas_sono' not in df.columns:
+            print("AVISO: A coluna 'horas_sono' não foi encontrada no arquivo.")
+            return
+            
+        # 3. FILTRO DE LIMPEZA: Remove as linhas antigas que estão sem o dado de sono
+        df_limpo = df.dropna(subset=['horas_sono'])
+        
+        if df_limpo.empty:
+            print("Não há dados de sono suficientes para gerar o gráfico.")
+            return
+
+        # 4. Separa os dados limpos para os eixos X e Y
+        horas_sono = df_limpo['horas_sono']
+        media_reacao = df_limpo['Media_Geral']
+        
+        # Cria a Janela
+        plt.figure(figsize=(10, 6))
+        
+        # Desenha os pontos (Dispersão)
+        plt.scatter(horas_sono, media_reacao, color='purple', s=80, alpha=0.7, edgecolors='black', label='Testes Realizados')
+        
+        # A Linha do Teto de Segurança da Fábrica (400ms)
+        plt.axhline(y=400, color='red', linestyle='--', linewidth=2, label='Teto de Bloqueio (400ms)')
+        
+        # Personalização do Gráfico
+        plt.title("Análise Preditiva: Reflexo Biológico x Privação de Sono", fontsize=14, fontweight='bold')
+        plt.xlabel("Horas de Sono Relatadas", fontsize=12)
+        plt.ylabel("Tempo Médio de Reação (ms)", fontsize=12)
+        
+        # Inverte o Eixo X (Dormir menos = Mais perigoso, fica perto do eixo Y)
+        plt.gca().invert_xaxis()
+        
+        plt.grid(True, linestyle=':', alpha=0.6)
+        plt.legend()
+        
+        # Mostra o gráfico na tela
+        plt.show()
+        
+    except Exception as e:
+        print(f"Erro ao gerar o gráfico de sono: {e}")
 
 def cadastrar_novo_operador():
     
@@ -92,10 +149,9 @@ inicializar_banco_operadores()
 
 def validar_login():
     global estado, usuario_atual, nivel_acesso, mensagem_login, input_texto, input_senha, campo_focado, proximo_evento
-    global limite_atual, em_calibracao
+    global limite_atual, em_calibracao, horas_sono_atual
     caminho_csv = os.path.join(obter_caminho_externo(), "operadores.csv")
     estado = 'LOGIN'
-    tema_escuro = True
 
     try:
         df = pd.read_csv(caminho_csv, dtype={'CPF': str})
@@ -195,7 +251,8 @@ tema_escuro = False
 ultimo_blink = time.time()
 usuario_deslogando = ""
 mensagem_login = ""
-
+input_sono = ""
+horas_sono_atual = 0.0
 CORES = {
     'PRETO': (15, 15, 15),
     'BRANCO': (240, 240, 240),
@@ -236,7 +293,7 @@ def obter_diagnostico(media_ms):
     else: return "FADIGA CRITICA", CORES['VERMELHO']
 
 # --- Funções de Dados ---
-def salvar_resultados(dados, erros_i, erros_o, usuario):
+def salvar_resultados(dados, erros_i, erros_o, usuario,horas_sono):
     print(f"Dados recebidos para salvar: {len(dados)} tentativas")
     if not dados or not usuario : 
         print("DEBUG: Falha - Dados ou Usuário vazios.")
@@ -261,7 +318,7 @@ def salvar_resultados(dados, erros_i, erros_o, usuario):
         with open(arquivo, 'a', newline='', encoding='utf-8-sig') as f:
             escritor = csv.writer(f)
             if not existe:
-                escritor.writerow(['Operador','Data_Hora', 'Media_Visual', 'Media_Sonora', 'Media_Geral', 'Status', 'Erros_Impulso', 'Erros_Omissao','Observacoes'])
+                escritor.writerow(['Operador','Data_Hora', 'Media_Visual', 'Media_Sonora', 'Media_Geral', 'Status', 'Erros_Impulso', 'Erros_Omissao','Observacoes','horas_sono'])
             
             escritor.writerow([
                 usuario.upper(), #Nome do Operador
@@ -272,7 +329,8 @@ def salvar_resultados(dados, erros_i, erros_o, usuario):
                 status, 
                 erros_i, 
                 erros_o,
-                "" #Observação vazia
+                "", #Observação vazia
+                horas_sono
             ])
             f.flush() # Força a gravação imediata no disco
         print(f"DEBUG: Dados salvos com sucesso em {arquivo}")
@@ -352,7 +410,39 @@ while True:
             pygame.quit(); sys.exit()
         if event.type == pygame.MOUSEBUTTONDOWN:
             clique = True     
-        
+
+        # 2. Porta do Teclado (Faltava este 'if' no seu!)
+        if event.type == pygame.KEYDOWN:
+        # --- LÓGICA DA TELA DE SONO ---
+            if estado == 'PERGUNTA_SONO':
+                if event.key == pygame.K_RETURN:
+                    if input_sono != "": # Se não estiver vazio
+                        try:
+                            # Salva o valor em float (aceita decimais)
+                            horas_sono_atual = float(input_sono)
+                            
+                            # AGORA SIM O TESTE É PREPARADO
+                            tentativa_atual = 0
+                            dados_coletados = []
+                            erros_impulso = 0
+                            erros_omissao = 0
+                            lista_estimulos = (['GO']*14 + ['NOGO']*6)
+                            random.shuffle(lista_estimulos)
+                            
+                            estado = 'ESPERA' # Vai para a contagem 3..2..1 do seu jogo
+                            proximo_evento = time.time() + 1.2
+                            
+                        except ValueError:
+                            # Se ele digitou algo inválido tipo ".."
+                            input_sono = "" 
+                            
+                elif event.key == pygame.K_BACKSPACE:
+                    input_sono = input_sono[:-1] # Apaga último caractere
+                else:
+                    # Filtra apenas números e ponto, limitando a 4 caracteres (ex: 10.5)
+                    if event.unicode in '0123456789.' and len(input_sono) < 4:
+                        input_sono += event.unicode
+
         # Lógica de teclado APENAS se estiver no LOGIN
         if event.type == pygame.KEYDOWN and estado == 'LOGIN':
             mensagem_login = ""
@@ -533,31 +623,36 @@ while True:
             mostrar_texto("PAINEL DE GESTÃO", CORES['AZUL'], margem_x, 80, 'g')
             mostrar_texto(f"Gestor Logado: {usuario_atual}", cor_texto_padrao, margem_x, 130, 'm')
 
-            # 1. Coordenadas dos botões (Admin) - Alinhados no Centro
-            btn_hist_rect = pygame.Rect(margem_x - 175, 220, 350, 60)
-            btn_cad_rect = pygame.Rect(margem_x - 175, 300, 350, 60)
-            btn_grafico_rect = pygame.Rect(margem_x - 175, 320, 350, 50)
-            btn_config_rect = pygame.Rect(margem_x - 175, 380, 350, 60) 
-
             # 2. Verifica banco de dados
             pasta_db = obter_caminho_externo()
             existe_db = os.path.exists(os.path.join(pasta_db, "log_foco_detalhado.csv"))
 
-            # 3. Desenha os Botões do Admin com Hover (efeito visual)
-            # Botão Histórico
+           # 1. Coordenadas exatas (Espaçamento de 70px entre cada botão)
+            btn_hist_rect = pygame.Rect(margem_x - 175, 180, 350, 50)
+            btn_cad_rect = pygame.Rect(margem_x - 175, 250, 350, 50)
+            btn_grafico_rect = pygame.Rect(margem_x - 175, 320, 350, 50)
+            btn_config_rect = pygame.Rect(margem_x - 175, 390, 350, 50)
+
+            # --- DESENHO DOS BOTÕES ---
+            # Botão 1: Histórico
             cor_h = (0, 120, 200) if btn_hist_rect.collidepoint(mouse_pos) and existe_db else (CORES['AZUL'] if existe_db else cor_caixas)
             pygame.draw.rect(tela, cor_h, btn_hist_rect, border_radius=10)
-            mostrar_texto("HISTÓRICO ", cor_texto_padrao, btn_hist_rect.centerx, btn_hist_rect.centery, 'm')
+            mostrar_texto("HISTÓRICO GERAL", CORES['BRANCO'], btn_hist_rect.centerx, btn_hist_rect.centery, 'm')
             
-            # Botão Cadastro
+            # Botão 2: Cadastro
             cor_c = (230, 120, 0) if btn_cad_rect.collidepoint(mouse_pos) else (200, 100, 0)
             pygame.draw.rect(tela, cor_c, btn_cad_rect, border_radius=10)
-            mostrar_texto("CADASTRO", cor_texto_padrao, btn_cad_rect.centerx, btn_cad_rect.centery, 'm')
+            mostrar_texto("CADASTRO DE OPERADOR", CORES['BRANCO'], btn_cad_rect.centerx, btn_cad_rect.centery, 'm')
 
-            # Botão Configurações (Prepara para o Tema)
-            cor_cfg = (100, 100, 100) if btn_config_rect.collidepoint(mouse_pos) else (80, 80, 80)
+            # Botão 3: Gráfico Fadiga x Sono
+            cor_g = (130, 0, 150) if btn_grafico_rect.collidepoint(mouse_pos) and existe_db else (100, 0, 120) if existe_db else CORES['CINZA_ESC']
+            pygame.draw.rect(tela, cor_g, btn_grafico_rect, border_radius=10)
+            mostrar_texto("GRÁFICO: FADIGA X SONO", CORES['BRANCO'], btn_grafico_rect.centerx, btn_grafico_rect.centery, 'm')
+
+            # Botão 4: Configurações
+            cor_cfg = (130, 100, 100) if btn_config_rect.collidepoint(mouse_pos) else (80, 80, 80)
             pygame.draw.rect(tela, cor_cfg, btn_config_rect, border_radius=10)
-            mostrar_texto("CONFIGURAÇÕES", cor_texto_padrao, btn_config_rect.centerx, btn_config_rect.centery, 'm')
+            mostrar_texto("CONFIGURAÇÕES", CORES['BRANCO'], btn_config_rect.centerx, btn_config_rect.centery, 'm')
 
 
         # =========================================================
@@ -584,14 +679,9 @@ while True:
                 elif btn_cores_rect.collidepoint(mouse_pos):
                     checks['cores'] = True
                 elif btn_start_rect.collidepoint(mouse_pos) and pode_iniciar:
-                    tentativa_atual = 0
-                    dados_coletados = []
-                    erros_impulso = 0
-                    erros_omissao = 0
-                    lista_estimulos = (['GO']*14 + ['NOGO']*6)
-                    random.shuffle(lista_estimulos)
-                    estado = 'ESPERA'
-                    proximo_evento = agora + 1.2
+                    input_sono = "" # Limpa a caixa por precaução
+                    estado = 'PERGUNTA_SONO' 
+                    
 
             # 3. Cliques Exclusivos do Administrador
             elif nivel_acesso == 1:
@@ -603,8 +693,30 @@ while True:
                 elif btn_config_rect.collidepoint(mouse_pos):
                     # Aqui vamos jogar ele para a tela de configurações!
                     estado = 'CONFIGURACOES'  
+                elif btn_grafico_rect.collidepoint(mouse_pos) and existe_db:
+                    gerar_grafico_fadiga_sono() # A nossa nova tela analítica
 
-    # =========================================================
+
+
+
+    elif estado == 'PERGUNTA_SONO':
+            mostrar_texto("PREPARAÇÃO PARA O TESTE", CORES['AMARELO'], LARGURA/2, 100, 'g')
+            mostrar_texto("Quantas horas você dormiu na última noite?", cor_texto_padrao, LARGURA/2, 200, 'm')
+            
+            # Desenha a caixa de texto
+            caixa_rect = pygame.Rect(LARGURA/2 - 60, 260, 120, 60)
+            pygame.draw.rect(tela, cor_caixas, caixa_rect, border_radius=10)
+            pygame.draw.rect(tela, CORES['AZUL'], caixa_rect, 2, border_radius=10)
+            
+            # Efeito de cursor piscando na cor certa dependendo do tema
+            cor_input = CORES['BRANCO'] if tema_escuro else (20, 20, 20)
+            texto_exibicao = input_sono + "|" if time.time() % 1 > 0.5 else input_sono
+            mostrar_texto(texto_exibicao, cor_input, caixa_rect.centerx, caixa_rect.centery, 'g')
+            
+            mostrar_texto("Digite o valor (ex: 7 ou 7.5) e pressione ENTER", CORES['CINZA_CLARO'], LARGURA/2, 400, 'p')
+            
+            # A LINHA 'estado = ESPERA' FOI EXCLUÍDA DAQUI!
+            # O estado só vai mudar quando o usuário apertar ENTER lá no evento de teclado.    # =========================================================
     # TELA DE CONFIGURAÇÕES (Admin)
     # =========================================================
     elif estado == 'CONFIGURACOES':
@@ -713,7 +825,7 @@ while True:
         if not foi_salvo:
             print(f"Salvando os dados de: {usuario_atual}")
             # Lembre-se de depois colocar o status_geral no seu salvar_resultados!
-            salvar_resultados(dados_coletados, erros_impulso, erros_omissao, usuario_atual)
+            salvar_resultados(dados_coletados, erros_impulso, erros_omissao, usuario_atual,horas_sono_atual)
             foi_salvo = True
 
         # 2. Cálculos de Médias
@@ -790,8 +902,6 @@ while True:
         if clique:
                 #reset de variáveis
             checks = {
-                    "som_L": False, 
-                    "som_R": False, 
                     "som_go": False, 
                     "som_nogo": False, 
                     "cores": False
@@ -801,6 +911,7 @@ while True:
             dados_coletados.clear()
             erros_impulso = 0
             erros_omissao = 0
+            input_sono = 0
             
             # 4. RESET DA TRAVA DE SALVAMENTO
             # Se você usou a variável 'foi_salvo' que sugeri:
