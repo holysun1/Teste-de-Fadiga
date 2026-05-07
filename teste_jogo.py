@@ -113,7 +113,7 @@ def gerar_grafico_fadiga_sono():
 inicializar_banco_operadores()
 
 def validar_login():
-    global estado, usuario_atual, nivel_acesso, mensagem_login, input_texto, input_senha, campo_focado, proximo_evento
+    global estado, usuario_atual, nivel_acesso, mensagem_login, input_texto, input_senha, campo_focado, proximo_evento, destino_pos_login,estado
     global limite_atual, em_calibracao, horas_sono_atual
     caminho_csv = os.path.join(obter_caminho_externo(), "operadores.csv")
     estado = 'LOGIN'
@@ -141,11 +141,19 @@ def validar_login():
             # 3. Sucesso (Tem 4 e está correta)
             else:
                 usuario_atual = nome_busca
-                nivel_acesso = int(user_row.iloc[0]['Nivel'])
+                # Pegamos o nível garantindo que seja um número inteiro
+                nivel_acesso = int(user_row.iloc[0]['Nivel']) 
+                
                 estado = 'CARREGANDO'
-                proximo_evento = time.time() + 2.0
+                proximo_evento = time.time() + 2.0 # Timer de 2 segundos
+                
+                # Limpamos os campos para segurança
                 input_texto = ""; input_senha = ""; campo_focado = "NOME"
                 
+                # FEEDBACK NO CONSOLE (Para você debugar)
+                print(f"Login: {usuario_atual} | Nivel: {nivel_acesso} | Destino: {destino_pos_login}")
+
+                            
                 # --- LÓGICA DE CALIBRAÇÃO (ALINHADA CORRETAMENTE) ---
                 if nivel_acesso == 0:
                     arquivo_historico = os.path.join(obter_caminho_externo(), "log_foco_detalhado.csv")
@@ -238,8 +246,23 @@ CORES = {
     'AZUL': (52, 152, 219),
     'CINZA_ESC': (30, 30, 30),
     'CINZA_CLARO': (70, 70, 70),
-    'OK': (39, 174, 96)
+    'OK': (39, 174, 96),
+    'SIDEBAR': (33, 37, 41),        # Grafite quase preto
+    'PRIMARIA': (0, 123, 255),      # Azul corporativo (Bootstrap)
+    'SUCESSO': (40, 167, 69),       # Verde sóbrio
+    'PERIGO': (220, 53, 69),        # Vermelho erro
+    'TEXTO_DARK': (33, 37, 41),     # Texto quase preto
+    'TEXTO_LIGHT': (255, 255, 255), # Texto branco
+    'CAIXA_INPUT': (255, 255, 255),  # Fundo das caixas branco puro
+    'FUNDO': (128, 128, 128),      # Cinza escuro de desktop antigo
+    'FACE': (192, 192, 192),       # Cinza clássico do botão
+    'BRILHO': (255, 255, 255),     # Borda superior/esquerda
+    'SOMBRA': (128, 128, 128),     # Borda inferior/direita (primeira camada)
+    'SOMBRA_FORTE': (0, 0, 0),     # Borda inferior/direita (final)
+    'TEXTO': (0, 0, 0),            # Preto puro
+    'AZUL_TITULO': (0, 0, 128)     # Azul marinho de barras de título
 }
+
 # 1. Lê a resolução real do monitor do usuário
 info_tela = pygame.display.Info()
 LARGURA = info_tela.current_w
@@ -355,6 +378,8 @@ proximo_evento = 0
 momento_estimulo = 0
 tipo_atual = ''
 subtipo_atual = ''
+estado = 'HOME'           # O jogo agora começa na tela inicial do seu desenho
+destino_pos_login = ''    # Vai guardar se ele clicou em TESTE ou PAINEL ADM
 # --- PARÂMETROS DE SEGURANÇA ---
 LIMITE_PADRAO_FABRICA = 0.400  # Tempo em segundos (400ms)
 
@@ -376,32 +401,27 @@ def mostrar_texto(txt, cor, x, y, tamanho='m'):
     retangulo = superficie.get_rect(center=(x, y))
     tela.blit(superficie, retangulo)
 
-def desenhar_botao(retangulo, cor_normal, cor_hover, texto, cor_texto, tamanho_fonte='m'):    
-    global mouse_sobre_btn
-    """Desenha um botão com efeito hover e clique tátil (afunda 3px)."""
+
+def desenhar_botao(rect, cor_base, cor_hover, texto, cor_texto, tam='m'):
     mouse_pos = pygame.mouse.get_pos()
-    botao_esquerdo_segurado = pygame.mouse.get_pressed()[0]
+    # Verifica se o mouse está em cima para mudar a cor de fundo
+    cor_atual = cor_hover if rect.collidepoint(mouse_pos) else cor_base
     
-    # Verifica se o mouse está em cima
-    is_hover = retangulo.collidepoint(mouse_pos)
+    # 1. Desenha o corpo do botão (quadrado perfeito, sem border_radius)
+    pygame.draw.rect(tela, cor_atual, rect)
 
-    if is_hover:
-        cor_atual = cor_hover
-        mouse_sobre_btn = True
-        deslocamento_y = 3 if botao_esquerdo_segurado else 0
-    
-    else:        
-    # Define a cor atual baseada no hover
-        cor_atual = cor_hover if is_hover else cor_normal
-        deslocamento_y = 0
-        
-# Cria o retângulo de desenho com ou sem deslocamento
-    rect_desenhado = retangulo.move(0, deslocamento_y)
-        
-    # Desenha o fundo do botão e o texto centralizado nele
-    pygame.draw.rect(tela, cor_atual, rect_desenhado, border_radius=10)
-    mostrar_texto(texto, cor_texto, rect_desenhado.centerx, rect_desenhado.centery, tamanho_fonte)
+    # 2. EFEITO 3D RETRO (O segredo do Windows 98)
+    # Linhas de BRILHO (Superior e Esquerda) - Branco puro
+    pygame.draw.line(tela, (255, 255, 255), (rect.x, rect.y), (rect.x + rect.w, rect.y), 2)
+    pygame.draw.line(tela, (255, 255, 255), (rect.x, rect.y), (rect.x, rect.y + rect.h), 2)
 
+    # Linhas de SOMBRA (Inferior e Direita) - Preto ou Cinza Escuro
+    # Desenhamos um pixel para dentro para o contorno ficar perfeito
+    pygame.draw.line(tela, (0, 0, 0), (rect.x + rect.w - 1, rect.y), (rect.x + rect.w - 1, rect.y + rect.h), 2)
+    pygame.draw.line(tela, (0, 0, 0), (rect.x, rect.y + rect.h - 1), (rect.x + rect.w, rect.y + rect.h - 1), 2)
+
+    # 3. TEXTO (Centralizado)
+    mostrar_texto(texto, cor_texto, rect.centerx, rect.centery, tam)
 def desenhar_barra_progresso():
     progresso = (tentativa_atual / TENTATIVAS_TOTAIS) * LARGURA
     pygame.draw.rect(tela, cor_caixas, (0, 0, LARGURA, 10))
@@ -415,6 +435,37 @@ input_senha = ""
 
 # --- Loop Principal ---
 while True:
+
+    
+    # 1. DEFINA OS BOTÕES DA HOME AQUI (Para o clique sempre encontrá-los)
+    larg_b = 300
+    btn_teste_h = pygame.Rect(LARGURA/2 - larg_b/2, 250, larg_b, 50)
+    btn_admin_h = pygame.Rect(LARGURA/2 - larg_b/2, 310, larg_b, 50)
+    btn_config_h = pygame.Rect(LARGURA/2 - larg_b/2, 370, larg_b, 50)
+    
+    # Ícones dos cantos
+    rect_pesquisa = pygame.Rect(LARGURA - 120, 40, 80, 80)
+    rect_reclamacao = pygame.Rect(LARGURA - 120, ALTURA - 120, 80, 80)
+
+        # Geometria das Caixas
+    largura_padrao = 400
+    altura_padrao = 45
+    pos_x_centro = LARGURA/2 - (largura_padrao / 2)
+    
+    # Todas as caixas usam o exato mesmo 'pos_x_centro' e 'largura_padrao'
+    rect_nome  = pygame.Rect(pos_x_centro, 150, largura_padrao, altura_padrao)
+    rect_cpf   = pygame.Rect(pos_x_centro, 230, largura_padrao, altura_padrao)
+    rect_setor = pygame.Rect(pos_x_centro, 310, largura_padrao, altura_padrao)
+    rect_nivel = pygame.Rect(pos_x_centro, 390, largura_padrao, altura_padrao)
+
+    # O Botão de Salvar agora tem a mesma largura do formulário (bloco sólido)
+    btn_salvar_cad = pygame.Rect(pos_x_centro, 470, largura_padrao, 50) 
+    
+    # O Botão voltar continua no canto inferior isolado
+    btn_voltar_rect = pygame.Rect(30, ALTURA - 75, 150, 45)
+
+
+
 # ==========================================
     # GERENCIADOR DE TEMA (CLARO/ESCURO)
     # ==========================================
@@ -434,6 +485,7 @@ while True:
     mouse_pos = pygame.mouse.get_pos()
     clique = False
 
+    mouse_pos = pygame.mouse.get_pos()
     for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit(); sys.exit()
@@ -444,19 +496,39 @@ while True:
             if event.type == pygame.MOUSEBUTTONUP:
                 clique = True 
 
-                # --- CLIQUES NA TELA DE MENU (ADMIN/OPERADOR) ---
-                if estado == 'MENU':
-                    # Só verifica o botão de sair se estiver no MENU
-                    # Botão Sair Comum a todos
-                    if btn_sair_rect.collidepoint(mouse_pos):
-                        usuario_deslogando = usuario_atual 
-                        estado = 'LOGOUT'
-                        proximo_evento = time.time() + 2 
-                        usuario_atual = ""
-                        input_texto = ""
-                        for chave in checks: checks[chave] = False
+                if estado == 'HOME':
+                    if btn_teste_h.collidepoint(mouse_pos):
+                        destino_pos_login = 'TESTE' # Ele quer fazer o teste
+                        estado = 'LOGIN'           # Mas mandamos para o login primeiro
+                    
+                    elif btn_admin_h.collidepoint(mouse_pos):
+                        destino_pos_login = 'MENU' # Ele quer ir pro painel
+                        estado = 'LOGIN'
+                        
+                    elif rect_pesquisa.collidepoint(mouse_pos):
+                        estado = 'PESQUISA' # Esse vai direto (Anônimo!)
+                        
+                    elif rect_reclamacao.collidepoint(mouse_pos):
+                        estado = 'RECLAMACAO' # Esse vai direto (Anônimo!)
+                    
+                    elif btn_config_h.collidepoint(mouse_pos):
+                        estado = 'CONFIGURACOES'
 
-                    # Cliques Exclusivos do OPERADOR (Nível 0)
+                    # --- CLIQUES NA TELA DE MENU (ADMIN/OPERADOR) ---
+                elif estado == 'MENU':
+                     # Só verifica o botão de sair se estiver no MENU
+                    # Botão Sair Comum a todos
+                    if btn_voltar_rect.collidepoint(mouse_pos):
+                        #Limpeza de segurança
+                        usuario_atual = ""
+                        input_texto = "" # Limpa o CPF digitado
+                        input_senha = "" # Limpa a senha
+                        nivel_acesso = -1 # Reseta o nível
+                        for chave in checks: checks[chave] = False
+                        estado = 'HOME'
+                    
+                    
+                        # Cliques Exclusivos do OPERADOR (Nível 0)
                     elif nivel_acesso == 0:
                         if btn_go_rect.collidepoint(mouse_pos):
                             som_go.play(); checks['som_go'] = True
@@ -479,9 +551,10 @@ while True:
                         elif btn_config_rect.collidepoint(mouse_pos):
                             estado = 'CONFIGURACOES'  
                         elif btn_grafico_rect.collidepoint(mouse_pos) and existe_db:
-                            gerar_grafico_fadiga_sono()
+                                gerar_grafico_fadiga_sono()
+                        
 
-                # --- CLIQUES NA TELA DE CADASTRO ---
+                            # --- CLIQUES NA TELA DE CADASTRO ---
                 elif estado == 'CADASTRO':
                     # Ação de Voltar (Aqui ele não vai mais conflitar com o Sair)
                     if btn_voltar_rect.collidepoint(mouse_pos):
@@ -502,8 +575,7 @@ while True:
                         # Pula entre 0 - Operador e 1 - Admin
                         idx_nivel = (idx_nivel + 1) % len(lista_niveis)
                         campo_focado = "" # Tira o cursor piscando do Nome/CPF
-                    
-
+                        
                     # Ação de Salvar
                     elif btn_salvar_cad.collidepoint(mouse_pos):
                         if len(input_cpf_cad) == 11 and len(input_nome_cad) > 3:
@@ -581,6 +653,36 @@ while True:
                         elif campo_focado == "CPF" and event.unicode.isdigit() and len(input_cpf_cad) < 11:
                             input_cpf_cad += event.unicode
                 
+
+    if estado == 'HOME':
+        tela.fill(CORES['FUNDO']) # Use aquele cinza empresarial que sugerimos
+        
+        # 1. RELÓGIO (Canto Superior Esquerdo)
+        import datetime
+        hora_atual = datetime.datetime.now().strftime("%H:%M:%S")
+        mostrar_texto(hora_atual, CORES['TEXTO_DARK'], 100, 50, 'm')
+        
+        # 2. LOGO EMPRESA (Centro Superior)
+        # Por enquanto um retângulo, depois você carrega uma imagem
+        rect_logo = pygame.Rect(LARGURA/2 - 100, 40, 200, 100)
+        pygame.draw.rect(tela, CORES['CINZA_ESC'], rect_logo, 2)
+        mostrar_texto("LOGO EMPRESA", CORES['TEXTO_DARK'], LARGURA/2, 90, 'p')
+        desenhar_botao(btn_teste_h, CORES['PRIMARIA'], (0, 100, 200), "INICIAR TESTE", CORES['BRANCO'])
+
+        desenhar_botao(btn_admin_h, (80, 80, 80), (100, 100, 100), "PAINEL ADM", CORES['BRANCO'])
+        desenhar_botao(btn_config_h, (80, 80, 80), (100, 100, 100), "CONFIGURAÇÕES", CORES['BRANCO'])
+
+        # 4. ÍCONES DOS CANTOS (Pesquisa e Reclamação)
+        # Superior Direito: Pesquisa
+        rect_pesquisa = pygame.Rect(LARGURA - 120, 40, 80, 80)
+        pygame.draw.circle(tela, (255, 200, 0), rect_pesquisa.center, 40) # Um círculo amarelo
+        mostrar_texto("SUGESTÃO", CORES['TEXTO_DARK'], LARGURA - 120, 130, 'p')
+        
+        # Inferior Direito: Reclamação
+        rect_reclamacao = pygame.Rect(LARGURA - 120, ALTURA - 120, 80, 80)
+        pygame.draw.circle(tela, (200, 50, 50), rect_reclamacao.center, 40) # Um círculo vermelho
+        mostrar_texto("OCORRIDO", CORES['TEXTO_DARK'], LARGURA - 120, ALTURA - 30, 'p')
+
     # --- Lógica de Estados ---
     if estado == 'LOGIN':
         usuario_atual = ""
@@ -620,6 +722,9 @@ while True:
         # desenhar_botao(retangulo, cor_normal, cor_hover, texto, cor_texto, tamanho_fonte)
         desenhar_botao(btn_entrar_rect, (100, 100, 100), CORES['VERDE'], "ENTRAR", cor_texto_padrao, 'p')
 
+        # O Botão voltar continua no canto inferior isolado
+        btn_voltar_rect = pygame.Rect(30, ALTURA - 75, 150, 45)
+        desenhar_botao(btn_voltar_rect, (60, 60, 60), (100, 30, 30), "←", CORES['BRANCO'])
 
         # --- MENSAGEM DE ERRO (REPOSICIONADA ABAIXO DO BOTÃO) ---
         if mensagem_login:
@@ -662,7 +767,7 @@ while True:
         btn_salvar_cad = pygame.Rect(pos_x_centro, 470, largura_padrao, 50) 
         
         # O Botão voltar continua no canto inferior isolado
-        btn_voltar_rect = pygame.Rect(30, ALTURA - 75, 100, 45)
+        btn_voltar_rect = pygame.Rect(30, ALTURA - 75, 150, 45)
 
        # --- NOME ---
         # Título agora centralizado perfeitamente com a caixa (centerx)
@@ -717,19 +822,21 @@ while True:
             mostrar_texto(mensagem_feedback, cor_feedback, LARGURA/2, 540, 'p')
 
     elif estado == 'CARREGANDO':
-        tela.fill(CORES['PRETO'])
-        
-        # Centraliza o texto de carregamento
-        mostrar_texto("AUTENTICANDO OPERADOR...", CORES['AMARELO'], LARGURA/2, ALTURA/2 - 20, 'p')
-        
-        # Opcional: Uma barra de progresso simples
-        progresso = 1.0 - (proximo_evento - agora) / 2.0 # Vai de 0 a 1
-        largura_barra = 300 * max(0, min(1, progresso))
-        pygame.draw.rect(tela, (50, 50, 50), (LARGURA/2 - 150, ALTURA/2 + 20, 300, 10), border_radius=5)
-        pygame.draw.rect(tela, CORES['VERDE'], (LARGURA/2 - 150, ALTURA/2 + 20, largura_barra, 10), border_radius=5)
-
-        if agora >= proximo_evento:
-            estado = 'MENU'
+            tela.fill(CORES['FUNDO'])
+            mostrar_texto("AUTENTICANDO...", CORES['PRIMARIA'], LARGURA/2, ALTURA/2, 'g')
+            
+            # O cronômetro acabou?
+            if time.time() > proximo_evento:
+                if destino_pos_login == 'TESTE':
+                    estado = 'PERGUNTA_SONO'
+                elif destino_pos_login == 'MENU':
+                    # Só deixa entrar se o nível for 1
+                    if nivel_acesso == 1:
+                        estado = 'MENU'
+                    else:
+                        # Se um espertinho tentar entrar no ADM sendo nível 0
+                        estado = 'HOME' 
+                        mensagem_login = "ACESSO NEGADO"
 
     elif estado == 'MENU':
 
@@ -738,8 +845,8 @@ while True:
         # =========================================================
         # BOTÃO COMPARTILHADO: SAIR / LOGOUT (Visível para ambos)
         # =========================================================
-        btn_sair_rect = pygame.Rect(30, ALTURA - 75, 150, 45)
-        desenhar_botao(btn_sair_rect, (60, 60, 60), (100, 30, 30), "←", CORES['BRANCO'])
+        btn_voltar_rect = pygame.Rect(30, ALTURA - 75, 150, 45)
+        desenhar_botao(btn_voltar_rect, (60, 60, 60), (100, 30, 30), "←", CORES['BRANCO'])
         # =========================================================
         # SALA 1 : MENU DO OPERADOR (NÍVEL 0)
         # =========================================================
@@ -753,7 +860,9 @@ while True:
             btn_nogo_rect = pygame.Rect(margem_x + 10, 220, 230, 45)
             btn_cores_rect = pygame.Rect(margem_x - 115, 290, 230, 45) 
             btn_start_rect = pygame.Rect(margem_x - 150, 460, 300, 70)
-
+            btn_voltar_rect = pygame.Rect(30, ALTURA - 75, 150, 45)
+        
+      
             # 2. Desenho do Bloco 1: BIPs
             cor_go = CORES['OK'] if checks.get('som_go') else cor_caixas
             pygame.draw.rect(tela, cor_go, btn_go_rect, border_radius=8)
@@ -784,6 +893,9 @@ while True:
                 mostrar_texto("BLOQUEADO", cor_texto_padrao, btn_start_rect.centerx, btn_start_rect.centery, 'm')
             else:
                 mostrar_texto("INICIAR TESTE", cor_texto_padrao, btn_start_rect.centerx, btn_start_rect.centery, 'm')
+
+            #5. Desenho botão voltar
+            desenhar_botao(btn_voltar_rect, (60, 60, 60), (100, 30, 30), "←", CORES['BRANCO'])
 
 
         # =========================================================
@@ -842,7 +954,7 @@ while True:
             
             mostrar_texto("Digite o valor (ex: 7 ou 7.5) e pressione ENTER", CORES['CINZA_CLARO'], LARGURA/2, 400, 'p')
             
-    # TELA DE CONFIGURAÇÕES (Admin)
+    # TELA DE CONFIGURAÇÕES
     # =========================================================
     elif estado == 'CONFIGURACOES':
         
@@ -881,7 +993,7 @@ while True:
         # 5. Processamento dos Cliques
         if clique:
             if btn_voltar_rect.collidepoint(mouse_pos):
-                estado = 'MENU' # Apenas volta para o painel de gestão
+                estado = 'HOME' # Apenas volta para o painel de gestão
             
             elif btn_tema_rect.collidepoint(mouse_pos):
                 # A MÁGICA: O comando "not" inverte o booleano. 
