@@ -221,8 +221,6 @@ lista_setores = ["OPERAÇÃO", "MANUTENÇÃO", "LOGÍSTICA", "ADMINISTRAÇÃO"]
 idx_setor = 0
 lista_niveis = ["0 - OPERADOR", "1 - ADMINISTRADOR"]
 idx_nivel = 0
-
-
 usuario_atual = ""
 nivel_acesso = 0
 estado = 'LOGIN'
@@ -237,6 +235,9 @@ usuario_deslogando = ""
 mensagem_login = ""
 input_sono = ""
 horas_sono_atual = 0.0
+tempo_inicio_contagem = 0
+
+
 CORES = {
     'PRETO': (15, 15, 15),
     'BRANCO': (240, 240, 240),
@@ -280,10 +281,7 @@ except Exception as e:
 pygame.display.set_icon(icone_imagem)
 pygame.display.set_caption("Controle de Fadiga PCP - Eng. Diego Vieira")
 
-
-
-
-arquivo_fonte = os.path.join("fontes", "Montserrat-Regular.ttf") 
+arquivo_fonte = os.path.join("fonte", "Montserrat-Regular.ttf") 
 try:
     # Tenta carregar a fonte moderna
     fonte_p = pygame.font.Font(arquivo_fonte, 20)  # Pequena
@@ -380,6 +378,7 @@ tipo_atual = ''
 subtipo_atual = ''
 estado = 'HOME'           # O jogo agora começa na tela inicial do seu desenho
 destino_pos_login = ''    # Vai guardar se ele clicou em TESTE ou PAINEL ADM
+estado_anterior = "" # Guarda se estávamos em GO, NOGO ou ESPERA
 # --- PARÂMETROS DE SEGURANÇA ---
 LIMITE_PADRAO_FABRICA = 0.400  # Tempo em segundos (400ms)
 
@@ -442,12 +441,15 @@ while True:
     btn_teste_h = pygame.Rect(LARGURA/2 - larg_b/2, 250, larg_b, 50)
     btn_admin_h = pygame.Rect(LARGURA/2 - larg_b/2, 310, larg_b, 50)
     btn_config_h = pygame.Rect(LARGURA/2 - larg_b/2, 370, larg_b, 50)
+
+    # --- GEOMETRIA DA TELA FIM ---
+    btn_finalizar_rect = pygame.Rect(LARGURA/2 - 150, 450, 300, 50)
     
     # Ícones dos cantos
     rect_pesquisa = pygame.Rect(LARGURA - 120, 40, 80, 80)
     rect_reclamacao = pygame.Rect(LARGURA - 120, ALTURA - 120, 80, 80)
 
-        # Geometria das Caixas
+    # Geometria das Caixas
     largura_padrao = 400
     altura_padrao = 45
     pos_x_centro = LARGURA/2 - (largura_padrao / 2)
@@ -464,7 +466,36 @@ while True:
     # O Botão voltar continua no canto inferior isolado
     btn_voltar_rect = pygame.Rect(30, ALTURA - 75, 150, 45)
 
+    # Botão "X" de saída no canto superior direito (durante o teste)
+    btn_x_fec_rect = pygame.Rect(LARGURA - 50, 10, 40, 40)
+    
+    # Janela Modal de Pausa (Centralizada)
+    larg_m, alt_m = 400, 300
+    modal_rect = pygame.Rect(LARGURA/2 - larg_m/2, ALTURA/2 - alt_m/2, larg_m, alt_m)
+    
+    # Botões da Modal
+    btn_continuar = pygame.Rect(modal_rect.x + 50, modal_rect.y + 80, 300, 45)
+    btn_reiniciar = pygame.Rect(modal_rect.x + 50, modal_rect.y + 140, 300, 45)
+    btn_fechar_teste = pygame.Rect(modal_rect.x + 50, modal_rect.y + 200, 300, 45)
 
+
+    margem_x = LARGURA / 2
+
+        # 1. Coordenadas dos botões (Operador)
+    btn_go_rect = pygame.Rect(margem_x - 240, 220, 230, 45)
+    btn_nogo_rect = pygame.Rect(margem_x + 10, 220, 230, 45)
+    btn_cores_rect = pygame.Rect(margem_x - 115, 290, 230, 45) 
+    btn_start_rect = pygame.Rect(margem_x - 150, 460, 300, 70)
+    btn_voltar_rect = pygame.Rect(30, ALTURA - 75, 150, 45)
+
+    # --- GEOMETRIA DA TELA DE CHECKS ---
+    larg_ck = 350
+    btn_ck_go = pygame.Rect(LARGURA/2 - larg_ck/2, 150, larg_ck, 50)
+    btn_ck_nogo = pygame.Rect(LARGURA/2 - larg_ck/2, 230, larg_ck, 50)
+    btn_ck_cor = pygame.Rect(LARGURA/2 - larg_ck/2, 310, larg_ck, 50)
+    
+    # O botão avançar (Fica escondido até tudo estar testado)
+    btn_ck_avancar = pygame.Rect(LARGURA/2 - 150, 420, 300, 50)
 
 # ==========================================
     # GERENCIADOR DE TEMA (CLARO/ESCURO)
@@ -496,7 +527,49 @@ while True:
             if event.type == pygame.MOUSEBUTTONUP:
                 clique = True 
 
-                if estado == 'HOME':
+                # --- ACIONAR PAUSA (Se estiver em qualquer fase do teste) ---
+                if estado in ['ESPERA', 'ESTIMULO', 'FEEDBACK']:
+                    if btn_x_fec_rect.collidepoint(mouse_pos):
+                        estado_anterior = estado # Salva onde parou
+                        estado = 'PAUSA'
+
+                # --- LÓGICA DENTRO DA PAUSA ---
+                elif estado == 'PAUSA':
+                    if btn_continuar.collidepoint(mouse_pos):
+                        # Em vez de voltar direto, inicia a contagem
+                        estado = 'CONTAGEM'
+                        tempo_inicio_contagem = time.time()
+                    
+                    elif btn_reiniciar.collidepoint(mouse_pos):
+                        # Reseta tudo e começa do zero
+                        dados_coletados.clear()
+                        erros_impulso = 0; erros_omissao = 0; tentativa_atual = 0
+                        estado = 'CONTAGEM'
+                        tempo_inicio_contagem = time.time()
+                    
+                    elif btn_fechar_teste.collidepoint(mouse_pos):
+                        # Cancela o teste e volta pro Menu sem salvar nada
+                        dados_coletados.clear()
+                        checks['som_go'] = False
+                        checks['som_nogo'] = False
+                        checks['cores'] = False
+                        estado = 'HOME'
+                        
+
+                elif estado == 'CHECKS':
+                    if btn_ck_go.collidepoint(mouse_pos):
+                        som_go.play(); checks['som_go'] = True
+                    elif btn_ck_nogo.collidepoint(mouse_pos):
+                        som_nogo.play(); checks['som_nogo'] = True
+                    elif btn_ck_cor.collidepoint(mouse_pos):
+                        checks['cores'] = True
+                    
+                    # Se os 3 forem True, o clique no Avançar funciona
+                    elif all(checks.values()) and btn_ck_avancar.collidepoint(mouse_pos):
+                        estado = 'PERGUNTA_SONO'
+                        input_sono = ""
+
+                elif estado == 'HOME':
                     if btn_teste_h.collidepoint(mouse_pos):
                         destino_pos_login = 'TESTE' # Ele quer fazer o teste
                         estado = 'LOGIN'           # Mas mandamos para o login primeiro
@@ -525,20 +598,13 @@ while True:
                         input_senha = "" # Limpa a senha
                         nivel_acesso = -1 # Reseta o nível
                         for chave in checks: checks[chave] = False
-                        estado = 'HOME'
+                        estado = 'LOGIN'
                     
                     
-                        # Cliques Exclusivos do OPERADOR (Nível 0)
+                    # Quando o login der sucesso e for nível 0
                     elif nivel_acesso == 0:
-                        if btn_go_rect.collidepoint(mouse_pos):
-                            som_go.play(); checks['som_go'] = True
-                        elif btn_nogo_rect.collidepoint(mouse_pos):
-                            som_nogo.play(); checks['som_nogo'] = True
-                        elif btn_cores_rect.collidepoint(mouse_pos):
-                            checks['cores'] = True
-                        elif btn_start_rect.collidepoint(mouse_pos) and pode_iniciar:
-                            input_sono = "" 
-                            estado = 'PERGUNTA_SONO'
+                        estado = 'CHECKS' # Esqueça o 'MENU', jogue ele direto pro check!
+                        for chave in checks: checks[chave] = False # Garante que os checks estão zerados
                     
                         # Cliques Exclusivos do ADMIN (Nível 1)
                     elif nivel_acesso == 1:
@@ -594,6 +660,39 @@ while True:
                         else:
                             mensagem_feedback = "DADOS INVÁLIDOS!"; cor_feedback = (200, 50, 50)
 
+                elif estado == 'LOGIN':
+                    # 1. Clique no Botão ENTRAR
+                    if btn_entrar_rect.collidepoint(mouse_pos):
+                        validar_login()
+                    if btn_voltar_rect.collidepoint(mouse_pos):
+                        estado = 'HOME'
+                        input_texto = ""; input_senha = ""; mensagem_login = ""
+
+                    if rect_nome.collidepoint(mouse_pos): campo_focado = "NOME"
+
+                    if rect_senha.collidepoint(mouse_pos): campo_focado = "SENHA"
+
+            
+                elif estado == 'FIM':
+                    if btn_finalizar_rect.collidepoint(mouse_pos):
+                        # 1. LIMPEZA DE DADOS
+                        for chave in checks: checks[chave] = False
+                        dados_coletados.clear()
+                        erros_impulso = 0
+                        erros_omissao = 0
+                        input_sono = 0
+                        foi_salvo = False 
+                        
+                        # 2. LOGOUT DO OPERADOR (Segurança Industrial)
+                        usuario_atual = ""
+                        input_texto = ""
+                        input_senha = ""
+                        nivel_acesso = -1
+                        
+                        # 3. VOLTA PARA A HOME (Lobby)
+                        estado = 'HOME'
+
+        
             # ==========================================
             # 2. LÓGICA DO TECLADO (KEYDOWN)
             # ==========================================
@@ -640,19 +739,6 @@ while True:
                             elif campo_focado == "SENHA" and len(input_senha) < 4:
                                 if event.unicode.isdigit(): input_senha += event.unicode
 
-                # --- TELA DE CADASTRO ---
-                elif estado == 'CADASTRO':
-                    if event.key == pygame.K_TAB:
-                        campo_focado = "CPF" if campo_focado == "NOME" else "NOME"
-                    elif event.key == pygame.K_BACKSPACE:
-                        if campo_focado == "NOME": input_nome_cad = input_nome_cad[:-1]
-                        else: input_cpf_cad = input_cpf_cad[:-1]
-                    else:
-                        if campo_focado == "NOME" and len(input_nome_cad) < 25:
-                            input_nome_cad += event.unicode.upper()
-                        elif campo_focado == "CPF" and event.unicode.isdigit() and len(input_cpf_cad) < 11:
-                            input_cpf_cad += event.unicode
-                
 
     if estado == 'HOME':
         tela.fill(CORES['FUNDO']) # Use aquele cinza empresarial que sugerimos
@@ -711,11 +797,6 @@ while True:
         mostrar_texto(txt_senha, CORES['BRANCO'], LARGURA/2, 322, 'p')
 
 
-        # Clique com o mouse para trocar de campo
-        if clique:
-            if rect_nome.collidepoint(mouse_pos): campo_focado = "NOME"
-            elif rect_senha.collidepoint(mouse_pos): campo_focado = "SENHA"
-
         # --- NOVO BOTÃO ENTRAR ---
         btn_entrar_rect = pygame.Rect(LARGURA/2 - 75, 360, 150, 45)
         
@@ -723,7 +804,6 @@ while True:
         desenhar_botao(btn_entrar_rect, (100, 100, 100), CORES['VERDE'], "ENTRAR", cor_texto_padrao, 'p')
 
         # O Botão voltar continua no canto inferior isolado
-        btn_voltar_rect = pygame.Rect(30, ALTURA - 75, 150, 45)
         desenhar_botao(btn_voltar_rect, (60, 60, 60), (100, 30, 30), "←", CORES['BRANCO'])
 
         # --- MENSAGEM DE ERRO (REPOSICIONADA ABAIXO DO BOTÃO) ---
@@ -731,9 +811,30 @@ while True:
             # Y ajustado para 425 para dar respiro ao botão
             mostrar_texto(mensagem_login, (255, 50, 50), LARGURA/2, 425, 'p')
 
-        # Lógica de Clique no Botão
-        if clique and btn_entrar_rect.collidepoint(mouse_pos):
-            validar_login()
+    elif estado == 'CONTAGEM':
+        tela.fill(CORES['FUNDO']) # Fundo padrão
+        
+        # Calcula quanto tempo passou desde o clique
+        tempo_passado = time.time() - tempo_inicio_contagem
+        
+        # Lógica do cronômetro regressivo
+        if tempo_passado < 1:
+            numero = "3"
+        elif tempo_passado < 2:
+            numero = "2"
+        elif tempo_passado < 3:
+            numero = "1"
+        else:
+            # Fim da contagem: Volta para o teste (ESPERA, GO ou NOGO)
+            estado = estado_anterior
+            # Ajustamos o próximo evento para o operador não ser pego de surpresa
+            proximo_evento = time.time() + 0.5 
+
+        # Desenha o número na tela se ainda estiver na contagem
+        if tempo_passado < 3:
+            mostrar_texto("PREPARE-SE...", (0, 0, 0), LARGURA/2, ALTURA/2 - 100, 'm')
+            # Desenha o número grande no centro em PRETO
+            mostrar_texto(numero, (0, 0, 0), LARGURA/2, ALTURA/2, 'g')
 
         
     elif estado == 'LOGOUT':
@@ -747,6 +848,27 @@ while True:
         if agora >= proximo_evento:
             estado = 'LOGIN'
             etapa_login = ""
+
+    elif estado == 'PAUSA':
+        # 1. Escurece o fundo (Efeito de sobreposição)
+        superficie_overlay = pygame.Surface((LARGURA, ALTURA))
+        superficie_overlay.set_alpha(150) # Transparência
+        superficie_overlay.fill((0, 0, 0))
+        tela.blit(superficie_overlay, (0,0))
+
+        # 2. Janela Modal (Estilo W98)
+        pygame.draw.rect(tela, (192, 192, 192), modal_rect)
+        pygame.draw.rect(tela, (255, 255, 255), modal_rect, 2) # Brilho
+        # Barra de título da modal (Azul clássico)
+        barra_titulo = pygame.Rect(modal_rect.x, modal_rect.y, modal_rect.width, 35)
+        pygame.draw.rect(tela, (0, 0, 128), barra_titulo)
+        mostrar_texto("TESTE INTERROMPIDO", (255, 255, 255), modal_rect.centerx, modal_rect.y + 17, 'p')
+
+        # 3. Botões
+        desenhar_botao(btn_continuar, (192, 192, 192), (210, 210, 210), "CONTINUAR", (0,0,0))
+        desenhar_botao(btn_reiniciar, (192, 192, 192), (210, 210, 210), "REINICIAR", (0,0,0))
+        desenhar_botao(btn_fechar_teste, (150, 50, 50), (200, 50, 50), "CANCELAR E SAIR", (255,255,255))
+
 
     elif estado == 'CADASTRO':
         
@@ -828,7 +950,7 @@ while True:
             # O cronômetro acabou?
             if time.time() > proximo_evento:
                 if destino_pos_login == 'TESTE':
-                    estado = 'PERGUNTA_SONO'
+                    estado = 'CHECKS'
                 elif destino_pos_login == 'MENU':
                     # Só deixa entrar se o nível for 1
                     if nivel_acesso == 1:
@@ -854,13 +976,6 @@ while True:
             mostrar_texto("CALIBRAÇÃO DE ESTÍMULOS", CORES['AMARELO'], margem_x, 50, 'g')
             mostrar_texto(f"Operador Logado: {usuario_atual}", cor_texto_padrao, margem_x, 90, 'p')
             mostrar_texto("Complete o preparo antes de iniciar:", CORES['CINZA_CLARO'], margem_x, 140, 'p')
-
-            # 1. Coordenadas dos botões (Operador)
-            btn_go_rect = pygame.Rect(margem_x - 240, 220, 230, 45)
-            btn_nogo_rect = pygame.Rect(margem_x + 10, 220, 230, 45)
-            btn_cores_rect = pygame.Rect(margem_x - 115, 290, 230, 45) 
-            btn_start_rect = pygame.Rect(margem_x - 150, 460, 300, 70)
-            btn_voltar_rect = pygame.Rect(30, ALTURA - 75, 150, 45)
         
       
             # 2. Desenho do Bloco 1: BIPs
@@ -936,6 +1051,43 @@ while True:
             # Botão 4: Configurações
             desenhar_botao(btn_config_rect, (80, 80, 80), (130, 100, 100), "CONFIGURAÇÕES", CORES['BRANCO'])
 
+    elif estado == 'CHECKS':
+        tela.fill(CORES['FUNDO'])
+        mostrar_texto("CHECKLIST DE EQUIPAMENTO", CORES['AZUL_TITULO'], LARGURA/2, 80, 'g')
+        mostrar_texto("Por favor, teste os estímulos antes de iniciar.", (0,0,0), LARGURA/2, 110, 'p')
+
+        # Função rápida para escolher a cor: Verde se testado, Cinza se pendente
+        def cor_check(testado): return (0, 150, 50) if testado else (192, 192, 192)
+        def cor_txt(testado): return (255, 255, 255) if testado else (0, 0, 0)
+
+        # Desenha os 3 botões
+        desenhar_botao(btn_ck_go, cor_check(checks['som_go']), (210,210,210), "1. TESTAR SOM 'GO'", cor_txt(checks['som_go']))
+        desenhar_botao(btn_ck_nogo, cor_check(checks['som_nogo']), (210,210,210), "2. TESTAR SOM 'NOGO'", cor_txt(checks['som_nogo']))
+        desenhar_botao(btn_ck_cor, cor_check(checks['cores']), (210,210,210), "3. TESTAR VISUAL", cor_txt(checks['cores']))
+
+        # --- AMOSTRAS DE CORES (Legenda Visual) ---
+        # Posicionadas ao lado direito do botão de Testar Visual
+        tamanho_q = 40
+        pos_x_amostra = btn_ck_cor.right + 30 # 30 pixels à direita do botão
+        
+        # 1. Quadrado Verde (GO) - Alinhado com a parte de cima do botão
+        rect_verde = pygame.Rect(pos_x_amostra, btn_ck_cor.y - 15, tamanho_q, tamanho_q)
+        pygame.draw.rect(tela, (0, 200, 0), rect_verde)      # Preenchimento Verde
+        pygame.draw.rect(tela, (0, 0, 0), rect_verde, 2)     # Borda W98
+        mostrar_texto("GO (OK)", (0, 150, 0), rect_verde.right + 40, rect_verde.centery, 'p')
+
+        # 2. Quadrado Vermelho (NO-GO) - Alinhado um pouco abaixo
+        rect_verm = pygame.Rect(pos_x_amostra, btn_ck_cor.y + 35, tamanho_q, tamanho_q)
+        pygame.draw.rect(tela, (200, 0, 0), rect_verm)       # Preenchimento Vermelho
+        pygame.draw.rect(tela, (0, 0, 0), rect_verm, 2)      # Borda W98
+        mostrar_texto("NO-GO (N)", (200, 0, 0), rect_verm.right + 45, rect_verm.centery, 'p')
+
+        # Se testou tudo, libera a passagem
+        if all(checks.values()):
+            desenhar_botao(btn_ck_avancar, (0, 0, 128), (0, 0, 200), "AVANÇAR →", (255, 255, 255))
+        else:
+            mostrar_texto("Teste todos os itens para continuar", (100, 100, 100), LARGURA/2, 445, 'p')
+
 
 
     elif estado == 'PERGUNTA_SONO':
@@ -1002,6 +1154,8 @@ while True:
 
     elif estado in ['ESPERA', 'ESTIMULO', 'FEEDBACK']:
         desenhar_barra_progresso()
+        # Desenha o botão X no canto
+        desenhar_botao(btn_x_fec_rect, (150, 0, 0), (200, 0, 0), "X", (255, 255, 255))
         if estado == 'ESPERA':
             if agora >= proximo_evento:
                 if not lista_estimulos: estado = 'FIM'
@@ -1055,103 +1209,51 @@ while True:
                 proximo_evento = agora + random.uniform(1.0,3.5)
 
     elif estado == 'FIM':
-        # 1. Salva os dados brutos primeiro (Sempre o mais importante)
-        if not foi_salvo:
-            print(f"Salvando os dados de: {usuario_atual}")
-            # Lembre-se de depois colocar o status_geral no seu salvar_resultados!
-            salvar_resultados(dados_coletados, erros_impulso, erros_omissao, usuario_atual,horas_sono_atual)
-            foi_salvo = True
+            # =========================================================
+            # 1. CÁLCULOS (Ocultos do Usuário)
+            # =========================================================
+            tempos_v = [d[1] for d in dados_coletados if d[0] == 'VISUAL']
+            tempos_s = [d[1] for d in dados_coletados if d[0] == 'SONORO']
+            media_v = sum(tempos_v)/len(tempos_v) if tempos_v else 0
+            media_s = sum(tempos_s)/len(tempos_s) if tempos_s else 0
+            pior_media = max(media_v, media_s)
 
-        # 2. Cálculos de Médias
-        tempos_v = [d[1] for d in dados_coletados if d[0] == 'VISUAL']
-        tempos_s = [d[1] for d in dados_coletados if d[0] == 'SONORO']
-        media_v = sum(tempos_v)/len(tempos_v) if tempos_v else 0
-        media_s = sum(tempos_s)/len(tempos_s) if tempos_s else 0
-        
-        # O pior resultado (mais lento) dita a segurança da fábrica
-        pior_media = max(media_v, media_s)
+            # O Sistema julga o operador
+            reprovado = pior_media > limite_atual
 
-        # =========================================================
-        # 3. O NOVO MOTOR DE DIAGNÓSTICO (Limite Dinâmico)
-        # =========================================================
-        # Limite global vem do Login (limite_atual). A zona amarela é 10% mais rigorosa.
-        limite_alerta = limite_atual * 0.90 
+            # =========================================================
+            # 2. SALVAMENTO (Sempre salva os dados reais no banco)
+            # =========================================================
+            if not foi_salvo:
+                print(f"Salvando os dados de: {usuario_atual}")
+                salvar_resultados(dados_coletados, erros_impulso, erros_omissao, usuario_atual, horas_sono_atual)
+                foi_salvo = True
 
-        # Função interna rápida para julgar as parciais e o geral
-        def avaliar_tempo(media_teste):
-            if media_teste <= limite_alerta:
-                return "NORMAL", CORES['VERDE']
-            elif media_teste <= limite_atual:
-                return "ATENÇÃO", CORES['AMARELO']
+            # =========================================================
+            # 3. INTERFACE DE TRIAGEM CEGA (O que o Operador vê)
+            # =========================================================
+            tela.fill(CORES['FUNDO']) # Fundo padrão (Cinza W98 ou sua cor)
+
+            # Painel de Aviso Central
+            painel_rect = pygame.Rect(LARGURA/2 - 300, 150, 600, 200)
+
+            if reprovado:
+                # ALERTA DE REPROVAÇÃO (Amarelo industrial, sem pânico)
+                pygame.draw.rect(tela, (220, 180, 0), painel_rect) # Fundo Amarelo
+                pygame.draw.rect(tela, (0, 0, 0), painel_rect, 4)  # Borda Grossa Preta
+                mostrar_texto("TESTE CONCLUÍDO", (0, 0, 0), LARGURA/2, 200, 'g')
+                mostrar_texto("Por favor, dirija-se à sala da Supervisão", (0, 0, 0), LARGURA/2, 260, 'm')
+                mostrar_texto("antes de iniciar o seu turno.", (0, 0, 0), LARGURA/2, 300, 'm')
             else:
-                return "FADIGA", CORES['VERMELHO']
+                # SUCESSO (Verde escuro, passagem livre)
+                pygame.draw.rect(tela, (0, 150, 50), painel_rect)  # Fundo Verde
+                pygame.draw.rect(tela, (0, 0, 0), painel_rect, 4)  # Borda Grossa Preta
+                mostrar_texto("TESTE CONCLUÍDO", (255, 255, 255), LARGURA/2, 200, 'g')
+                mostrar_texto(f"Bom trabalho, {usuario_atual}.", (255, 255, 255), LARGURA/2, 260, 'm')
+                mostrar_texto("Acesso Liberado. Tenha um excelente turno!", (255, 255, 255), LARGURA/2, 300, 'm')
 
-        # Diagnósticos individuais das caixinhas
-        status_v, cor_v = avaliar_tempo(media_v)
-        status_s, cor_s = avaliar_tempo(media_s)
-
-        # Diagnóstico Geral (A Catraca)
-        if pior_media <= limite_alerta:
-            status_linha1 = "APROVADO"
-            status_linha2 = "FOCO NORMAL"
-            cor_geral = CORES['VERDE']
-        elif pior_media <= limite_atual:
-            status_linha1 = "ATENÇÃO REDUZIDA"
-            status_linha2 = "ACESSO LIBERADO"
-            cor_geral = CORES['AMARELO']
-        else:
-            status_linha1 = "FADIGA CRÍTICA"
-            status_linha2 = "OPERADOR BLOQUEADO"
-            cor_geral = CORES['VERMELHO']        # =========================================================
-
-        # --- Interface Refinada ---
-        mostrar_texto("DADOS POR MODALIDADE", CORES['AMARELO'], LARGURA/2, 80, 'm')
-        
-        # Bloco Visual
-        pygame.draw.rect(tela, cor_caixas, (100, 130, 280, 100), border_radius=10)
-        mostrar_texto(f"VISUAL: {media_v:.1f} ms", cor_texto_padrao, 240, 160, 'm')
-        mostrar_texto(status_v, cor_v, 240, 200, 'p')
-
-        # Bloco Sonoro
-        pygame.draw.rect(tela, cor_caixas, (420, 130, 280, 100), border_radius=10)
-        mostrar_texto(f"SONORO: {media_s:.1f} ms", cor_texto_padrao, 560, 160, 'm')
-        mostrar_texto(status_s, cor_s, 560, 200, 'p')
-
-# Status Unificado (O Veredito Final)
-        pygame.draw.line(tela, CORES['CINZA_CLARO'], (100, 270), (700, 270), 2)
-        mostrar_texto("VEREDITO GERAL:", cor_texto_padrao, LARGURA/2, 295, 'p') # Subi um pouco
-        
-        # Desenha as duas linhas separadas
-        mostrar_texto(status_linha1, cor_geral, LARGURA/2, 335, 'g')
-        mostrar_texto(status_linha2, cor_geral, LARGURA/2, 375, 'g')
-
-        # --- NOVIDADE: Transparência de Segurança ---
-        if em_calibracao:
-             mostrar_texto("(Sistema em Fase de Calibração Pessoal - Padrão Fábrica)", CORES['AMARELO'], LARGURA/2, 440, 'p')
-        else:
-             mostrar_texto(f"(Sua margem de corte hoje é de: {limite_atual:.0f} ms)", cor_texto_padrao, LARGURA/2, 440, 'p')
-
-        # Botão de retorno
-        mostrar_texto("Clique para voltar ao menu", CORES['CINZA_CLARO'], LARGURA/2, 550, 'p')          
-        if clique:
-                #reset de variáveis
-            checks = {
-                    "som_go": False, 
-                    "som_nogo": False, 
-                    "cores": False
-                }
-                
-            # 3. LIMPEZA DE DADOS (Zera as estatísticas do teste que acabou)
-            dados_coletados.clear()
-            erros_impulso = 0
-            erros_omissao = 0
-            input_sono = 0
-            
-            # 4. RESET DA TRAVA DE SALVAMENTO
-            # Se você usou a variável 'foi_salvo' que sugeri:
-            foi_salvo = False 
-            # RESET DE ESTADO
-            estado = 'MENU'
+            # Botão de Encerrar
+            desenhar_botao(btn_finalizar_rect, (192, 192, 192), (210, 210, 210), "ENCERRAR SESSÃO", (0,0,0))
 
   # ==========================================
     # GERENCIADOR DE CURSOR (UX)
