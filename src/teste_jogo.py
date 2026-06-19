@@ -609,7 +609,7 @@ while True:
                         # Cliques Exclusivos do ADMIN (Nível 1)
                     elif nivel_acesso == 1:
                         if btn_hist_rect.collidepoint(mouse_pos) and existe_db:
-                            import src.dashboard as dashboard
+                            import dashboard
                             dashboard.gerar_analise()
                         elif btn_cad_rect.collidepoint(mouse_pos):
                             estado = 'CADASTRO' 
@@ -646,7 +646,7 @@ while True:
                     elif btn_salvar_cad.collidepoint(mouse_pos):
                         if len(input_cpf_cad) == 11 and len(input_nome_cad) > 3:
                             try:
-                                caminho_csv = os.path.join(obter_caminho_externo(), "operadores.csv")
+                                caminho_csv = os.path.join(obter_caminho_externo(), "..\operadores.csv")
                                 df = pd.read_csv(caminho_csv, dtype={'CPF': str})
                                 if input_cpf_cad in df['CPF'].values:
                                     mensagem_feedback = "ERRO: CPF JÁ CADASTRADO!"; cor_feedback = (200, 50, 50)
