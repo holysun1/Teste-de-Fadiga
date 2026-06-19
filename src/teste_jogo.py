@@ -591,7 +591,7 @@ while True:
             if event.type == pygame.MOUSEBUTTONUP:
                 clique = True 
                 
-                if btn_fechar_rect.collidepoint(mouse_pos):
+                if estado == 'HOME' and btn_fechar_rect.collidepoint(mouse_pos):
                     pygame.quit()
                     sys.exit()
 
@@ -673,6 +673,10 @@ while True:
                             texto_critica = ""
                             campo_ativo = None
                             estado = 'HOME' # Ou o nome exato do seu estado da tela inicial
+                        elif btn_voltar_rect.collidepoint(mouse_pos):
+                            estado = 'HOME'  # Cancela a pesquisa e volta para a HOME
+                            campo_ativo = None
+                            if texto_nome.strip() == "": texto_nome = "Anonimo"
                         else:
                             campo_ativo = None
                             if texto_nome.strip() == "": texto_nome = "Anonimo"
@@ -1105,6 +1109,8 @@ while True:
         pygame.draw.rect(tela, COR_BOTAO_P, rect_enviar_p, border_radius=5)
         txt_btn = fonte_btn_p.render("Enviar", True, COR_BG_PESQUISA)
         tela.blit(txt_btn, (rect_enviar_p.centerx - txt_btn.get_width()//2, rect_enviar_p.centery - txt_btn.get_height()//2))
+
+        desenhar_botao(btn_voltar_rect, (60, 60, 60), (100, 30, 30), "←", CORES['BRANCO'])
 
     elif estado == 'MENU':
 
