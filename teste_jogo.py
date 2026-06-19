@@ -45,8 +45,8 @@ def resource_path(relative_path):
 
 # --- CARREGAMENTO SEGURO DOS SONS ---
 try:
-    som_go = pygame.mixer.Sound(resource_path("som_go.wav"))
-    som_nogo = pygame.mixer.Sound(resource_path("som_nogo.wav"))
+    som_go = pygame.mixer.Sound(resource_path("assets/audio/som_go.wav"))
+    som_nogo = pygame.mixer.Sound(resource_path("assets/audio/som_nogo.wav"))
     audio_on = True
 except Exception as e:
     print(f"Aviso: Não foi possível carregar os sons: {e}")
@@ -274,7 +274,7 @@ tela = pygame.display.set_mode((LARGURA, ALTURA), pygame.FULLSCREEN)
 
 tela = pygame.display.set_mode((LARGURA, ALTURA))
 try:
-    icone_imagem = pygame.image.load(resource_path("icon.png"))
+    icone_imagem = pygame.image.load(resource_path("assets/icon.png"))
     pygame.display.set_icon(icone_imagem)
 except Exception as e:
     print(f"Aviso: Ícone não carregado: {e}")
@@ -362,8 +362,8 @@ def gerar_beep(frequencia, duracao_ms=150):
     stereo_array = np.stack((sound_array, sound_array), axis=-1)
     return pygame.sndarray.make_sound(stereo_array)
 
-som_go = pygame.mixer.Sound(resource_path("som_go.wav"))
-som_nogo = pygame.mixer.Sound(resource_path("som_nogo.wav"))
+som_go = pygame.mixer.Sound(resource_path("assets/audio/som_go.wav"))
+som_nogo = pygame.mixer.Sound(resource_path("assets/audio/som_nogo.wav"))
 
 # --- Variáveis Globais ---
 TENTATIVAS_TOTAIS = 10
