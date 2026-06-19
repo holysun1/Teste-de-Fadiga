@@ -1078,40 +1078,42 @@ while True:
                         mensagem_login = "ACESSO NEGADO"
 
     elif estado == 'PESQUISA':
-        tela.fill(COR_BG_PESQUISA)
-        txt_info1 = fonte_p.render("Sugestões e críticas são feitas anonimamente.", True, COR_TEXTO_P)
-        txt_info2 = fonte_sub_p.render("Caso queira se identificar, preencha o campo Nome:", True, COR_MUTED_P)
-        tela.blit(txt_info1, (100, 60))
-        tela.blit(txt_info2, (100, 90))
+        tela.fill(cor_fundo) # Usa o fundo dinâmico do app
         
-        tela.blit(fonte_p.render("Nome:", True, COR_TEXTO_P), (100, 155))
-        tela.blit(fonte_p.render("Sugestão:", True, COR_TEXTO_P), (100, 245))
-        tela.blit(fonte_p.render("Crítica / Reclamação:", True, COR_TEXTO_P), (100, 355))
+        # Textos de Instrução adaptados ao tema atual
+        mostrar_texto("Sugestões e críticas são feitas anonimamente.", cor_texto_padrao, 100 + 180, 60, 'p')
+        mostrar_texto("Caso queira se identificar, preencha o campo Nome:", CORES['TEXTO_DARK'] if tema_escuro else CORES['CINZA_CLARO'], 100 + 200, 90, 'p')
         
-        pygame.draw.rect(tela, COR_CARD_PESQUISA, rect_nome_p, border_radius=4)
-        pygame.draw.rect(tela, COR_EMERALD_P if campo_ativo == "nome" else COR_CARD_PESQUISA, rect_nome_p, 2, border_radius=4)
+        # Labels alinhados com o tema
+        mostrar_texto("Nome:", cor_texto_padrao, 130, 155, 'p')
+        mostrar_texto("Sugestão:", cor_texto_padrao, 140, 245, 'p')
+        mostrar_texto("Crítica / Reclamação:", cor_texto_padrao, 185, 355, 'p')
         
-        pygame.draw.rect(tela, COR_CARD_PESQUISA, rect_sugestao_p, border_radius=4)
-        pygame.draw.rect(tela, COR_EMERALD_P if campo_ativo == "sugestao" else COR_CARD_PESQUISA, rect_sugestao_p, 2, border_radius=4)
+        # Caixas de Input usando a cor padrão de caixas (cor_caixas)
+        pygame.draw.rect(tela, cor_caixas, rect_nome_p, border_radius=4)
+        pygame.draw.rect(tela, CORES['AZUL'] if campo_ativo == "nome" else CORES['CINZA_ESC'], rect_nome_p, 2, border_radius=4)
         
-        pygame.draw.rect(tela, COR_CARD_PESQUISA, rect_critica_p, border_radius=4)
-        pygame.draw.rect(tela, COR_EMERALD_P if campo_ativo == "critica" else COR_CARD_PESQUISA, rect_critica_p, 2, border_radius=4)
+        pygame.draw.rect(tela, cor_caixas, rect_sugestao_p, border_radius=4)
+        pygame.draw.rect(tela, CORES['AZUL'] if campo_ativo == "sugestao" else CORES['CINZA_ESC'], rect_sugestao_p, 2, border_radius=4)
         
-        # Cursor dinâmico baseado em tempo de execução
+        pygame.draw.rect(tela, cor_caixas, rect_critica_p, border_radius=4)
+        pygame.draw.rect(tela, CORES['AZUL'] if campo_ativo == "critica" else CORES['CINZA_ESC'], rect_critica_p, 2, border_radius=4)
+        
+        # Letras internas dos inputs mudam de cor para dar contraste com o fundo da caixa
+        cor_letra_input = CORES['BRANCO'] if tema_escuro else CORES['TEXTO']
+        
         cursor_nome = "|" if campo_ativo == "nome" and time.time() % 1 > 0.5 else ""
         cursor_sug = "|" if campo_ativo == "sugestao" and time.time() % 1 > 0.5 else ""
         cursor_crit = "|" if campo_ativo == "critica" and time.time() % 1 > 0.5 else ""
 
-        tela.blit(fonte_p.render(texto_nome + cursor_nome, True, COR_TEXTO_P), (110, 190))
-        tela.blit(fonte_p.render(texto_sugestao + cursor_sug, True, COR_TEXTO_P), (110, 290))
-        tela.blit(fonte_p.render(texto_critica + cursor_crit, True, COR_TEXTO_P), (110, 400))
+        # Usando a função mostrar_texto padrão para manter consistência tipográfica
+        mostrar_texto(texto_nome + cursor_nome, cor_letra_input, rect_nome_p.x + 80, rect_nome_p.centery, 'p')
+        mostrar_texto(texto_sugestao + cursor_sug, cor_letra_input, rect_sugestao_p.x + 120, rect_sugestao_p.centery, 'p')
+        mostrar_texto(texto_critica + cursor_crit, cor_letra_input, rect_critica_p.x + 120, rect_critica_p.centery, 'p')
         
-        pygame.draw.rect(tela, COR_BOTAO_P, rect_enviar_p, border_radius=5)
-        txt_btn = fonte_btn_p.render("Enviar", True, COR_BG_PESQUISA)
-        tela.blit(txt_btn, (rect_enviar_p.centerx - txt_btn.get_width()//2, rect_enviar_p.centery - txt_btn.get_height()//2))
-
+        # Botão Enviar com visual padrão do sistema
+        desenhar_botao(rect_enviar_p, CORES['PRIMARIA'], CORES['AZUL'], "ENVIAR", CORES['BRANCO'], 'p')
         desenhar_botao(btn_voltar_rect, (60, 60, 60), (100, 30, 30), "←", CORES['BRANCO'])
-
     elif estado == 'MENU':
 
         margem_x = LARGURA / 2
