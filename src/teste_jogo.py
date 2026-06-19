@@ -6,7 +6,7 @@ import os
 import csv
 import numpy as np
 import pandas as pd
-from datetime import datetime
+from datetime import datetime 
 import tkinter as tk
 from tkinter import simpledialog, messagebox
 import sys
@@ -430,37 +430,34 @@ def desenhar_barra_progresso():
     pygame.draw.rect(tela, CORES['AZUL'], (0, 0, progresso, 10))
 
 def salvar_feedback(nome, sugestao, critica):
-        pasta_db = obter_caminho_externo()
-        filename = os.path.join(pasta_db, "sugestoes_criticas.csv")
+    pasta_db = obter_caminho_externo()
+    filename = os.path.join(pasta_db, "sugestoes_criticas.csv")
+    
+    try:
+        # 1. Verifica se o arquivo é novo ANTES de abrir em modo append ('a')
+        arquivo_novo = not os.path.exists(filename)
         
-        if not os.path.exists(filename):
-            print("Arquivo de log não encontrado.")
-            return
-
-        try:
-            # 1. Lê o banco avisando o Pandas sobre os acentos (tenta utf-8, se falhar tenta latin1)
-            try:
-                df = pd.read_csv(filename, encoding='utf-8-sig')
-            except UnicodeDecodeError:
-                df = pd.read_csv(filename, encoding='latin1')
-            data_atual = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        data_atual = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        
+        # Se o campo nome for deixado em branco ou vazio, força o padrão "Anonimo"
+        nome_final = nome.strip() if nome.strip() != "" else "Anonimo"
+        
+        # 2. Abrimos com 'utf-8-sig' para que o Excel e o Pandas leiam os acentos perfeitamente
+        with open(filename, mode='a', newline='', encoding='utf-8-sig') as file:
+            writer = csv.writer(file)
             
-            # Se o campo nome for deixado em branco ou vazio, força o padrão "Anonimo"
-            nome_final = nome.strip() if nome.strip() != "" else "Anonimo"
+            if arquivo_novo:
+                # Se o arquivo acabou de ser criado, adiciona o cabeçalho primeiro
+                writer.writerow(["Data/Hora", "Nome", "Sugestao", "Critica/Reclamacao"])
+                print(f"[DEBUG] Novo arquivo criado com cabeçalhos em: {filename}")
             
-            # Verifica se precisa criar o cabeçalho (caso o arquivo não exista)
-            arquivo_novo = not os.path.exists(filename)
+            # Escreve a nova linha com o feedback recebido
+            writer.writerow([data_atual, nome_final, sugestao.strip(), critica.strip()])
             
-            with open(filename, mode='a', newline='', encoding='utf-8') as file:
-                writer = csv.writer(file)
-                if arquivo_novo:
-                    # Cabeçalho do arquivo CSV
-                    writer.writerow(["Data/Hora", "Nome", "Sugestao", "Critica/Reclamacao"])
-                    
-                # Escreve a nova linha com o feedback recebido
-                writer.writerow([data_atual, nome_final, sugestao.strip(), critica.strip()])
-        except Exception as e:
-          print(f"Erro ao gerar o arquivo de sugestoes {e}")
+        print(f"[DEBUG] Feedback gravado com sucesso para o operador: {nome_final}")
+        
+    except Exception as e:
+        print(f"Erro ao salvar o arquivo de sugestoes: {e}")
 
 # --- CONFIGURAÇÕES DE CORES E FONTES DO ESTADO 'PESQUISA' ---
 COR_BG_PESQUISA = (15, 23, 42)      # Slate-900
@@ -858,8 +855,7 @@ while True:
         tela.fill(CORES['FUNDO']) # Use aquele cinza empresarial que sugerimos
         
         # 1. RELÓGIO (Canto Superior Esquerdo)
-        import datetime
-        hora_atual = datetime.datetime.now().strftime("%H:%M:%S")
+        hora_atual = datetime.now().strftime("%H:%M:%S")
         mostrar_texto(hora_atual, CORES['TEXTO_DARK'], 100, 50, 'm')
         
         # 2. LOGO EMPRESA (Centro Superior)
