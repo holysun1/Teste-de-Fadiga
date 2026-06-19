@@ -432,6 +432,8 @@ foi_salvo = False
 etapa_login ="NOME"
 input_senha = ""
 
+btn_fechar_rect = pygame.Rect(25,ALTURA-70,150,45)
+
 # --- Loop Principal ---
 while True:
 
@@ -441,6 +443,7 @@ while True:
     btn_teste_h = pygame.Rect(LARGURA/2 - larg_b/2, 250, larg_b, 50)
     btn_admin_h = pygame.Rect(LARGURA/2 - larg_b/2, 310, larg_b, 50)
     btn_config_h = pygame.Rect(LARGURA/2 - larg_b/2, 370, larg_b, 50)
+    
 
     # --- GEOMETRIA DA TELA FIM ---
     btn_finalizar_rect = pygame.Rect(LARGURA/2 - 150, 450, 300, 50)
@@ -526,9 +529,13 @@ while True:
             # ==========================================
             if event.type == pygame.MOUSEBUTTONUP:
                 clique = True 
+                
+                if btn_fechar_rect.collidepoint(event.pos):
+                    pygame.quit()
+                    sys.exit()
 
                 # --- ACIONAR PAUSA (Se estiver em qualquer fase do teste) ---
-                if estado in ['ESPERA', 'ESTIMULO', 'FEEDBACK']:
+                elif estado in ['ESPERA', 'ESTIMULO', 'FEEDBACK']:
                     if btn_x_fec_rect.collidepoint(mouse_pos):
                         estado_anterior = estado # Salva onde parou
                         estado = 'PAUSA'
@@ -768,6 +775,9 @@ while True:
         rect_reclamacao = pygame.Rect(LARGURA - 120, ALTURA - 120, 80, 80)
         pygame.draw.circle(tela, (200, 50, 50), rect_reclamacao.center, 40) # Um círculo vermelho
         mostrar_texto("OCORRIDO", CORES['TEXTO_DARK'], LARGURA - 120, ALTURA - 30, 'p')
+
+        pygame.draw.rect(tela,CORES['CINZA_ESC'], btn_fechar_rect,border_radius=5)
+        mostrar_texto("SAIR",CORES['BRANCO'],btn_fechar_rect.centerx, btn_fechar_rect.centery)
 
     # --- Lógica de Estados ---
     if estado == 'LOGIN':
