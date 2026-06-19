@@ -112,9 +112,11 @@ def gerar_grafico_fadiga_sono():
 
 inicializar_banco_operadores()
 
+
 def validar_login():
     global estado, usuario_atual, nivel_acesso, mensagem_login, input_texto, input_senha, campo_focado, proximo_evento, destino_pos_login,estado
     global limite_atual, em_calibracao, horas_sono_atual
+    global campo_ativo, texto_nome, texto_sugestao,texto_critica,estado 
     caminho_csv = os.path.join(obter_caminho_externo(), "operadores.csv")
     estado = 'LOGIN'
 
@@ -252,10 +254,10 @@ CORES = {
     'PRIMARIA': (0, 123, 255),      # Azul corporativo (Bootstrap)
     'SUCESSO': (40, 167, 69),       # Verde sóbrio
     'PERIGO': (220, 53, 69),        # Vermelho erro
-    'TEXTO_DARK': (33, 37, 41),     # Texto quase preto
-    'TEXTO_LIGHT': (255, 255, 255), # Texto branco
+    'TEXTO_DARK': (148,163,184),     # Texto quase preto
+    'TEXTO_LIGHT': (241, 245, 249), # Texto branco
     'CAIXA_INPUT': (255, 255, 255),  # Fundo das caixas branco puro
-    'FUNDO': (128, 128, 128),      # Cinza escuro de desktop antigo
+    'FUNDO': (15, 23, 42),      # Cinza escuro de desktop antigo
     'FACE': (192, 192, 192),       # Cinza clássico do botão
     'BRILHO': (255, 255, 255),     # Borda superior/esquerda
     'SOMBRA': (128, 128, 128),     # Borda inferior/direita (primeira camada)
@@ -263,6 +265,7 @@ CORES = {
     'TEXTO': (0, 0, 0),            # Preto puro
     'AZUL_TITULO': (0, 0, 128)     # Azul marinho de barras de título
 }
+
 
 # 1. Lê a resolução real do monitor do usuário
 info_tela = pygame.display.Info()
@@ -426,6 +429,63 @@ def desenhar_barra_progresso():
     pygame.draw.rect(tela, cor_caixas, (0, 0, LARGURA, 10))
     pygame.draw.rect(tela, CORES['AZUL'], (0, 0, progresso, 10))
 
+def salvar_feedback(nome, sugestao, critica):
+        pasta_db = obter_caminho_externo()
+        filename = os.path.join(pasta_db, "sugestoes_criticas.csv")
+        
+        if not os.path.exists(filename):
+            print("Arquivo de log não encontrado.")
+            return
+
+        try:
+            # 1. Lê o banco avisando o Pandas sobre os acentos (tenta utf-8, se falhar tenta latin1)
+            try:
+                df = pd.read_csv(filename, encoding='utf-8-sig')
+            except UnicodeDecodeError:
+                df = pd.read_csv(filename, encoding='latin1')
+            data_atual = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+            
+            # Se o campo nome for deixado em branco ou vazio, força o padrão "Anonimo"
+            nome_final = nome.strip() if nome.strip() != "" else "Anonimo"
+            
+            # Verifica se precisa criar o cabeçalho (caso o arquivo não exista)
+            arquivo_novo = not os.path.exists(filename)
+            
+            with open(filename, mode='a', newline='', encoding='utf-8') as file:
+                writer = csv.writer(file)
+                if arquivo_novo:
+                    # Cabeçalho do arquivo CSV
+                    writer.writerow(["Data/Hora", "Nome", "Sugestao", "Critica/Reclamacao"])
+                    
+                # Escreve a nova linha com o feedback recebido
+                writer.writerow([data_atual, nome_final, sugestao.strip(), critica.strip()])
+        except Exception as e:
+          print(f"Erro ao gerar o arquivo de sugestoes {e}")
+
+# --- CONFIGURAÇÕES DE CORES E FONTES DO ESTADO 'PESQUISA' ---
+COR_BG_PESQUISA = (15, 23, 42)      # Slate-900
+COR_CARD_PESQUISA = (30, 41, 59)    # Slate-800
+COR_TEXTO_P = (241, 245, 249)       # Slate-100
+COR_MUTED_P = (148, 163, 184)       # Slate-400
+COR_EMERALD_P = (52, 211, 153)      # Emerald-400
+COR_BOTAO_P = (16, 185, 129)        # Emerald-500
+
+fonte_p = pygame.font.SysFont("Arial", 18)
+fonte_sub_p = pygame.font.SysFont("Arial", 16, italic=True)
+fonte_btn_p = pygame.font.SysFont("Arial", 18, bold=True)
+
+# --- VARIÁVEIS DE CONTROLE DO FORMULÁRIO ---
+texto_nome = "Anonimo"
+texto_sugestao = ""
+texto_critica = ""
+campo_ativo = None  # Pode ser: "nome", "sugestao", "critica" ou None
+
+# --- DIMENSÕES DOS INPUTS (Ajuste o X e Y conforme a sua janela) ---
+rect_nome_p = pygame.Rect(100, 180, 400, 40)
+rect_sugestao_p = pygame.Rect(100, 270, 600, 60)
+rect_critica_p = pygame.Rect(100, 380, 600, 60)
+rect_enviar_p = pygame.Rect(100, 470, 150, 45)
+
 clock = pygame.time.Clock()
 pygame.key.set_repeat(300,50)
 foi_salvo = False
@@ -436,7 +496,7 @@ btn_fechar_rect = pygame.Rect(25,ALTURA-70,150,45)
 
 # --- Loop Principal ---
 while True:
-
+    
     
     # 1. DEFINA OS BOTÕES DA HOME AQUI (Para o clique sempre encontrá-los)
     larg_b = 300
@@ -521,6 +581,7 @@ while True:
 
     mouse_pos = pygame.mouse.get_pos()
     for event in pygame.event.get():
+            
             if event.type == pygame.QUIT:
                 pygame.quit(); sys.exit()
 
@@ -530,7 +591,7 @@ while True:
             if event.type == pygame.MOUSEBUTTONUP:
                 clique = True 
                 
-                if btn_fechar_rect.collidepoint(event.pos):
+                if btn_fechar_rect.collidepoint(mouse_pos):
                     pygame.quit()
                     sys.exit()
 
@@ -587,14 +648,36 @@ while True:
                         
                     elif rect_pesquisa.collidepoint(mouse_pos):
                         estado = 'PESQUISA' # Esse vai direto (Anônimo!)
-                        
+                        campo_ativo = None
                     elif rect_reclamacao.collidepoint(mouse_pos):
                         estado = 'RECLAMACAO' # Esse vai direto (Anônimo!)
                     
                     elif btn_config_h.collidepoint(mouse_pos):
                         estado = 'CONFIGURACOES'
 
-                    # --- CLIQUES NA TELA DE MENU (ADMIN/OPERADOR) ---
+                elif estado == 'PESQUISA':
+                        # Gerenciar focos de clique
+                        if rect_nome_p.collidepoint(mouse_pos):
+                            campo_ativo = "nome"
+                            if texto_nome == "Anonimo": texto_nome = "" # Limpa para o usuário digitar
+                        elif rect_sugestao_p.collidepoint(mouse_pos):
+                            campo_ativo = "sugestao"
+                        elif rect_critica_p.collidepoint(mouse_pos):
+                            campo_ativo = "critica"
+                        elif rect_enviar_p.collidepoint(mouse_pos):
+                            # Ação do Botão Enviar
+                            salvar_feedback(texto_nome, texto_sugestao, texto_critica)
+                            # Reseta o formulário e volta para a tela inicial do jogo
+                            texto_nome = "Anonimo"
+                            texto_sugestao = ""
+                            texto_critica = ""
+                            campo_ativo = None
+                            estado = 'HOME' # Ou o nome exato do seu estado da tela inicial
+                        else:
+                            campo_ativo = None
+                            if texto_nome.strip() == "": texto_nome = "Anonimo"
+                     
+                # --- CLIQUES NA TELA DE MENU (ADMIN/OPERADOR) ---
                 elif estado == 'MENU':
                      # Só verifica o botão de sair se estiver no MENU
                     # Botão Sair Comum a todos
@@ -705,8 +788,28 @@ while True:
             # ==========================================
             if event.type == pygame.KEYDOWN:
                 
+                if estado == 'PESQUISA' and campo_ativo:
+                    if event.key == pygame.K_BACKSPACE:
+                        if campo_ativo == "nome": texto_nome = texto_nome[:-1]
+                        elif campo_ativo == "sugestao": texto_sugestao = texto_sugestao[:-1]
+                        elif campo_ativo == "critica": texto_critica = texto_critica[:-1]
+                        
+                    elif event.key == pygame.K_TAB:
+                        if campo_ativo == "nome": campo_ativo = "sugestao"
+                        elif campo_ativo == "sugestao": campo_ativo = "critica"
+                        elif campo_ativo == "critica": campo_ativo = "nome"
+                        
+                    elif event.key == pygame.K_ESCAPE:
+                        estado = 'HOME' # Cancela e volta
+                        
+                    else:
+                        if event.unicode.isprintable():
+                            if campo_ativo == "nome": texto_nome += event.unicode
+                            elif campo_ativo == "sugestao": texto_sugestao += event.unicode
+                            elif campo_ativo == "critica": texto_critica += event.unicode
+
                 # --- TELA DE SONO ---
-                if estado == 'PERGUNTA_SONO':
+                elif estado == 'PERGUNTA_SONO':
                     if event.key == pygame.K_RETURN:
                         if input_sono != "":
                             try:
@@ -780,7 +883,7 @@ while True:
         mostrar_texto("SAIR",CORES['BRANCO'],btn_fechar_rect.centerx, btn_fechar_rect.centery)
 
     # --- Lógica de Estados ---
-    if estado == 'LOGIN':
+    elif estado == 'LOGIN':
         usuario_atual = ""
         proximo_evento = 0
         mostrar_texto("SISTEMA DE CONTROLE DE FADIGA", CORES['AMARELO'], LARGURA/2, 150, 'm')
@@ -969,6 +1072,39 @@ while True:
                         # Se um espertinho tentar entrar no ADM sendo nível 0
                         estado = 'HOME' 
                         mensagem_login = "ACESSO NEGADO"
+
+    elif estado == 'PESQUISA':
+        tela.fill(COR_BG_PESQUISA)
+        txt_info1 = fonte_p.render("Sugestões e críticas são feitas anonimamente.", True, COR_TEXTO_P)
+        txt_info2 = fonte_sub_p.render("Caso queira se identificar, preencha o campo Nome:", True, COR_MUTED_P)
+        tela.blit(txt_info1, (100, 60))
+        tela.blit(txt_info2, (100, 90))
+        
+        tela.blit(fonte_p.render("Nome:", True, COR_TEXTO_P), (100, 155))
+        tela.blit(fonte_p.render("Sugestão:", True, COR_TEXTO_P), (100, 245))
+        tela.blit(fonte_p.render("Crítica / Reclamação:", True, COR_TEXTO_P), (100, 355))
+        
+        pygame.draw.rect(tela, COR_CARD_PESQUISA, rect_nome_p, border_radius=4)
+        pygame.draw.rect(tela, COR_EMERALD_P if campo_ativo == "nome" else COR_CARD_PESQUISA, rect_nome_p, 2, border_radius=4)
+        
+        pygame.draw.rect(tela, COR_CARD_PESQUISA, rect_sugestao_p, border_radius=4)
+        pygame.draw.rect(tela, COR_EMERALD_P if campo_ativo == "sugestao" else COR_CARD_PESQUISA, rect_sugestao_p, 2, border_radius=4)
+        
+        pygame.draw.rect(tela, COR_CARD_PESQUISA, rect_critica_p, border_radius=4)
+        pygame.draw.rect(tela, COR_EMERALD_P if campo_ativo == "critica" else COR_CARD_PESQUISA, rect_critica_p, 2, border_radius=4)
+        
+        # Cursor dinâmico baseado em tempo de execução
+        cursor_nome = "|" if campo_ativo == "nome" and time.time() % 1 > 0.5 else ""
+        cursor_sug = "|" if campo_ativo == "sugestao" and time.time() % 1 > 0.5 else ""
+        cursor_crit = "|" if campo_ativo == "critica" and time.time() % 1 > 0.5 else ""
+
+        tela.blit(fonte_p.render(texto_nome + cursor_nome, True, COR_TEXTO_P), (110, 190))
+        tela.blit(fonte_p.render(texto_sugestao + cursor_sug, True, COR_TEXTO_P), (110, 290))
+        tela.blit(fonte_p.render(texto_critica + cursor_crit, True, COR_TEXTO_P), (110, 400))
+        
+        pygame.draw.rect(tela, COR_BOTAO_P, rect_enviar_p, border_radius=5)
+        txt_btn = fonte_btn_p.render("Enviar", True, COR_BG_PESQUISA)
+        tela.blit(txt_btn, (rect_enviar_p.centerx - txt_btn.get_width()//2, rect_enviar_p.centery - txt_btn.get_height()//2))
 
     elif estado == 'MENU':
 
@@ -1217,6 +1353,8 @@ while True:
                 tentativa_atual += 1
                 estado = 'ESPERA' if tentativa_atual < TENTATIVAS_TOTAIS else 'FIM'
                 proximo_evento = agora + random.uniform(1.0,3.5)
+
+        
 
     elif estado == 'FIM':
             # =========================================================
