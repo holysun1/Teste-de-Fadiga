@@ -609,7 +609,7 @@ while True:
                         # Cliques Exclusivos do ADMIN (Nível 1)
                     elif nivel_acesso == 1:
                         if btn_hist_rect.collidepoint(mouse_pos) and existe_db:
-                            import dashboard
+                            import src.dashboard as dashboard
                             dashboard.gerar_analise()
                         elif btn_cad_rect.collidepoint(mouse_pos):
                             estado = 'CADASTRO' 
