@@ -588,7 +588,7 @@ while True:
             if event.type == pygame.MOUSEBUTTONUP:
                 clique = True 
                 
-                if estado == 'HOME' and btn_fechar_rect.collidepoint(mouse_pos):
+                if estado == 'HOME' and btn_fechar_rect.collidepoint(mouse_pos): #CORRIGIDO BUG DE HIERARQUIA ( CLIQUE FANTASMA)
                     pygame.quit()
                     sys.exit()
 
