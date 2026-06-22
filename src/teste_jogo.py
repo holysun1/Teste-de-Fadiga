@@ -28,7 +28,7 @@ def inicializar_banco_operadores():
             with open(arquivo, 'w', encoding='utf-8') as f:
                 #Nova estrutura com CPF
                 f.write("Nome,CPF,Nivel\n")
-                f.write("ADMIN,00000000000,1\n") 
+                f.write("ADMIN,$$2b$12$K89b9hGZ0lY2U37tF1W1WeY7Y0z9zS6rR7xV7vY9yZ9zS6rR7xV7v$$,1\n") 
             print(f"Banco de Operadores criado em {arquivo}")
         except Exception as e:
             print(f"Erro ao criar {e}")
@@ -551,14 +551,7 @@ while True:
     btn_start_rect = pygame.Rect(margem_x - 150, 460, 300, 70)
     btn_voltar_rect = pygame.Rect(30, ALTURA - 75, 150, 45)
 
-    # --- GEOMETRIA DA TELA DE CHECKS ---
-    larg_ck = 350
-    btn_ck_go = pygame.Rect(LARGURA/2 - larg_ck/2, 150, larg_ck, 50)
-    btn_ck_nogo = pygame.Rect(LARGURA/2 - larg_ck/2, 230, larg_ck, 50)
-    btn_ck_cor = pygame.Rect(LARGURA/2 - larg_ck/2, 310, larg_ck, 50)
-    
-    # O botão avançar (Fica escondido até tudo estar testado)
-    btn_ck_avancar = pygame.Rect(LARGURA/2 - 150, 420, 300, 50)
+      
 
 # ==========================================
     # GERENCIADOR DE TEMA (CLARO/ESCURO)
@@ -624,16 +617,8 @@ while True:
                         estado = 'HOME'
                         
 
-                elif estado == 'CHECKS':
-                    if btn_ck_go.collidepoint(mouse_pos):
-                        som_go.play(); checks['som_go'] = True
-                    elif btn_ck_nogo.collidepoint(mouse_pos):
-                        som_nogo.play(); checks['som_nogo'] = True
-                    elif btn_ck_cor.collidepoint(mouse_pos):
-                        checks['cores'] = True
-                    
                     # Se os 3 forem True, o clique no Avançar funciona
-                    elif all(checks.values()) and btn_ck_avancar.collidepoint(mouse_pos):
+                    elif all(checks.values()) and btn_start_rect.collidepoint(mouse_pos):
                         estado = 'PERGUNTA_SONO'
                         input_sono = ""
 
@@ -697,9 +682,16 @@ while True:
                     
                     # Quando o login der sucesso e for nível 0
                     elif nivel_acesso == 0:
-                        estado = 'CHECKS' # Esqueça o 'MENU', jogue ele direto pro check!
-                        for chave in checks: checks[chave] = False # Garante que os checks estão zerados
-                    
+                        if btn_cores_rect.collidepoint(mouse_pos):
+                            checks['cores'] = True
+                        if btn_go_rect.collidepoint(mouse_pos):
+                            som_go.play(); checks['som_go'] = True
+                        if btn_nogo_rect.collidepoint(mouse_pos):
+                            som_nogo.play(); checks['som_nogo'] = True      
+
+                        elif all(checks.values()) and btn_start_rect.collidepoint(mouse_pos):
+                            estado = 'PERGUNTA_SONO'
+                            input_sono = ""                    
                         # Cliques Exclusivos do ADMIN (Nível 1)
                     elif nivel_acesso == 1:
                         if btn_hist_rect.collidepoint(mouse_pos) and existe_db:
@@ -1069,9 +1061,7 @@ while True:
             # O cronômetro acabou?
             if time.time() > proximo_evento:
                 if destino_pos_login == 'TESTE':
-                    estado = 'CHECKS'
-                elif destino_pos_login == 'MENU':
-                    # Só deixa entrar se o nível for 1
+                    estado = 'MENU'
                     if nivel_acesso == 1:
                         estado = 'MENU'
                     else:
@@ -1206,44 +1196,6 @@ while True:
 
             # Botão 4: Configurações
             desenhar_botao(btn_config_rect, (80, 80, 80), (130, 100, 100), "CONFIGURAÇÕES", CORES['BRANCO'])
-
-    elif estado == 'CHECKS':
-        tela.fill(CORES['FUNDO'])
-        mostrar_texto("CHECKLIST DE EQUIPAMENTO", CORES['AZUL_TITULO'], LARGURA/2, 80, 'g')
-        mostrar_texto("Por favor, teste os estímulos antes de iniciar.", (0,0,0), LARGURA/2, 110, 'p')
-
-        # Função rápida para escolher a cor: Verde se testado, Cinza se pendente
-        def cor_check(testado): return (0, 150, 50) if testado else (192, 192, 192)
-        def cor_txt(testado): return (255, 255, 255) if testado else (0, 0, 0)
-
-        # Desenha os 3 botões
-        desenhar_botao(btn_ck_go, cor_check(checks['som_go']), (210,210,210), "1. TESTAR SOM 'GO'", cor_txt(checks['som_go']))
-        desenhar_botao(btn_ck_nogo, cor_check(checks['som_nogo']), (210,210,210), "2. TESTAR SOM 'NOGO'", cor_txt(checks['som_nogo']))
-        desenhar_botao(btn_ck_cor, cor_check(checks['cores']), (210,210,210), "3. TESTAR VISUAL", cor_txt(checks['cores']))
-
-        # --- AMOSTRAS DE CORES (Legenda Visual) ---
-        # Posicionadas ao lado direito do botão de Testar Visual
-        tamanho_q = 40
-        pos_x_amostra = btn_ck_cor.right + 30 # 30 pixels à direita do botão
-        
-        # 1. Quadrado Verde (GO) - Alinhado com a parte de cima do botão
-        rect_verde = pygame.Rect(pos_x_amostra, btn_ck_cor.y - 15, tamanho_q, tamanho_q)
-        pygame.draw.rect(tela, (0, 200, 0), rect_verde)      # Preenchimento Verde
-        pygame.draw.rect(tela, (0, 0, 0), rect_verde, 2)     # Borda W98
-        mostrar_texto("GO (OK)", (0, 150, 0), rect_verde.right + 40, rect_verde.centery, 'p')
-
-        # 2. Quadrado Vermelho (NO-GO) - Alinhado um pouco abaixo
-        rect_verm = pygame.Rect(pos_x_amostra, btn_ck_cor.y + 35, tamanho_q, tamanho_q)
-        pygame.draw.rect(tela, (200, 0, 0), rect_verm)       # Preenchimento Vermelho
-        pygame.draw.rect(tela, (0, 0, 0), rect_verm, 2)      # Borda W98
-        mostrar_texto("NO-GO (N)", (200, 0, 0), rect_verm.right + 45, rect_verm.centery, 'p')
-
-        # Se testou tudo, libera a passagem
-        if all(checks.values()):
-            desenhar_botao(btn_ck_avancar, (0, 0, 128), (0, 0, 200), "AVANÇAR →", (255, 255, 255))
-        else:
-            mostrar_texto("Teste todos os itens para continuar", (100, 100, 100), LARGURA/2, 445, 'p')
-
 
 
     elif estado == 'PERGUNTA_SONO':
