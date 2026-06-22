@@ -11,6 +11,7 @@ import tkinter as tk
 from tkinter import simpledialog, messagebox
 import sys
 import matplotlib.pyplot as plt
+import bcrypt
 
 def obter_caminho_externo():
     if getattr(sys, 'frozen', False): 
@@ -124,19 +125,20 @@ def validar_login():
         df = pd.read_csv(caminho_csv, dtype={'CPF': str})
         # 1. Limpeza dos dados de entrada
         nome_busca = input_texto.strip().upper()
+        user_row = df[df['Nome'].str.upper() == nome_busca]      
         
         # 2. Busca o usuário
-        user_row = df[df['Nome'].str.upper() == nome_busca]        
         
         if not user_row.empty:
-            cpf_completo = str(user_row.iloc[0]['CPF']).strip()
-            
             # 1. Checagem de Quantidade (Menos de 4 dígitos)
             if len(input_senha) < 4:
                 mensagem_login = "A SENHA DEVE CONTER 4 DÍGITOS!"
-                
+            
+            hash_armazenado = str(user_row.iloc[0]['senha_hash']).strip()
+            senha_correta = bcrypt.checkpw(input_senha.encode('utf-8'),hash_armazenado.encode('utf-8'))
+
             # 2. Checagem de Validade (Se tem 4, mas está errada)
-            elif input_senha != cpf_completo[:4]:
+            if not senha_correta:
                 mensagem_login = "SENHA INCORRETA!"
                 input_senha = "" 
                 
@@ -158,6 +160,7 @@ def validar_login():
                             
                 # --- LÓGICA DE CALIBRAÇÃO (ALINHADA CORRETAMENTE) ---
                 if nivel_acesso == 0:
+                    estado = 'MENU'
                     arquivo_historico = os.path.join(obter_caminho_externo(), "log_foco_detalhado.csv")
                     
                     if os.path.exists(arquivo_historico):
@@ -742,8 +745,11 @@ while True:
                                 if input_cpf_cad in df['CPF'].values:
                                     mensagem_feedback = "ERRO: CPF JÁ CADASTRADO!"; cor_feedback = (200, 50, 50)
                                 else:
+                                    #GERAR HASH DA SENHA PADRÃO
+                                    senha_padrao = input_cpf_cad[:4]
+                                    senha_hash = bcrypt.hashpw(senha_padrao.encode('utf-8'), bcrypt.gensalt().decode('utf-8'))
                                     with open(caminho_csv, 'a', encoding='utf-8') as f:
-                                        f.write(f"{input_nome_cad},{input_cpf_cad},0\n")
+                                        f.write(f"{input_nome_cad},{input_cpf_cad},0,{senha_hash}\n")
                                     mensagem_feedback = "CADASTRADO COM SUCESSO!"; cor_feedback = (50, 180, 50)
                                     input_nome_cad = ""; input_cpf_cad = ""
                             except Exception as e:
