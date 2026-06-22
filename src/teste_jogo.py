@@ -887,7 +887,7 @@ while True:
         mostrar_texto("SISTEMA DE CONTROLE DE FADIGA", CORES['AMARELO'], LARGURA/2, 150, 'm')
 
         # --- CAMPO NOME ---
-        mostrar_texto("NOME DO OPERADOR:", cor_texto_padrao, LARGURA/2, 180, 'p')
+        mostrar_texto("OPERADOR:", cor_texto_padrao, LARGURA/2, 180, 'p')
         cor_borda_nome = CORES['AZUL'] if campo_focado == "NOME" else cor_caixas
         rect_nome = pygame.Rect(LARGURA/2 - 150, 200, 300, 45)
         pygame.draw.rect(tela, (30,30,30), rect_nome, border_radius=5)
@@ -897,7 +897,7 @@ while True:
         mostrar_texto(txt_nome, CORES['BRANCO'], LARGURA/2, 222, 'p')
 
         # --- CAMPO SENHA ---
-        mostrar_texto("SENHA (4 PRIMEIROS DÍGITOS DO CPF):", cor_texto_padrao, LARGURA/2, 280, 'p')
+        mostrar_texto("SENHA: ", cor_texto_padrao, LARGURA/2, 280, 'p')
         cor_borda_senha = CORES['AZUL'] if campo_focado == "SENHA" else cor_caixas
         rect_senha = pygame.Rect(LARGURA/2 - 150, 300, 300, 45)
         pygame.draw.rect(tela, (30,30,30), rect_senha, border_radius=5)
