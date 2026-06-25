@@ -7,7 +7,7 @@ def obter_caminho_externo():
     return os.path.dirname(os.path.abspath(__file__))
 
 def migrar_banco_de_dados():
-    caminho_csv = os.path.join(obter_caminho_externo(), "operadores.csv")
+    caminho_csv = os.path.join(obter_caminho_externo(), "operadores_backup.csv")
     
     print("Iniciando a migração do operadores.csv...")
     
