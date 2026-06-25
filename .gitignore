@@ -7,3 +7,5 @@ dist/
 *.csv
 *.png
 .mp4
+.venv/
+venv/
